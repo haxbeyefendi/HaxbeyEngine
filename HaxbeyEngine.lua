@@ -200,7 +200,7 @@ end)
 
 local function addTab(name, scroll)
     local b = inst("TextButton", {
-        Size = UDim2.new(1 / 4, -5, 1, 0), BackgroundColor3 = ROW, Text = name,
+        Size = UDim2.new(1 / 5, -5, 1, 0), BackgroundColor3 = ROW, Text = name,
         TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13, AutoButtonColor = false,
     }, tabBar)
     inst("UICorner", { CornerRadius = UDim.new(0, 5) }, b)
@@ -352,557 +352,442 @@ slider(charPage, 3, "Gravity",      "Grav",  20, 196, 1,    "%d",    "GravOn")
 slider(charPage, 4, "Head size",    "Head",  1,  5,   0.1,  "%.1fx", "HeadOn")
 slider(charPage, 5, "Transparency", "Trans", 0,  1,   0.05, "%.2f",  "TransOn")
 
--- Shop tab
+-- Catalog and Creator Store tabs
 do
     local HttpService = game:GetService("HttpService")
-    local Market      = game:GetService("MarketplaceService")
-    local httpReq     = request or http_request or (syn and syn.request) or (http and http.request)
-    local clip        = setclipboard or toclipboard
+    local Market = game:GetService("MarketplaceService")
+    local httpReq = request or http_request or (syn and syn.request) or (http and http.request)
+    local clip = setclipboard or toclipboard
 
-    local shopPage = addTab("🛒 Shop", false)
+    -- Both pages share a small request gap to reduce rate-limit pressure.
+    local lastRequest = 0
+    local REQUEST_GAP = 0.75
 
-    local PAGE_SIZE = 30   -- creator store modes
-    local CAT_PAGE  = 60   -- catalog items per request on the specific attempts
-    local CAT_MIN   = 18   -- auto-load another page if we have fewer cards than this
-    local CAT_TRIES = 2    -- max requests per page (kept low so roblox doesn't rate limit you)
-    local GAP       = 0.6  -- minimum seconds between any two requests
-    local MODES = {
-        { name = "Catalog" },                                  -- avatar shop
-        { name = "Models",  cat = "Model",  toolbox = 10 },
-        { name = "Decals",  cat = "Decal",  toolbox = 13 },
-        { name = "Audio",   cat = "Audio",  toolbox = 3  },
-        { name = "Plugins", cat = "Plugin", toolbox = 38 },
-    }
-
-    -- catalog filters: cat/sub go to the server, types is a fallback if the server rejects them (AssetTypeIds)
-    local ACC = { [8]=true, [41]=true, [42]=true, [43]=true, [44]=true, [45]=true, [46]=true, [47]=true }
     local FILTERS = {
         { name = "All" },
-        { name = "Accessories",     cat = "Accessories", types = ACC },
-        { name = "Hats",            cat = "Accessories", sub = "HatAccessories",      types = { [8]=true } },
-        { name = "Hair",            cat = "Accessories", sub = "HairAccessories",     types = { [41]=true } },
-        { name = "Face",            cat = "Accessories", sub = "FaceAccessories",     types = { [42]=true } },
-        { name = "Neck",            cat = "Accessories", sub = "NeckAccessories",     types = { [43]=true } },
-        { name = "Shoulder",        cat = "Accessories", sub = "ShoulderAccessories", types = { [44]=true } },
-        { name = "Front",           cat = "Accessories", sub = "FrontAccessories",    types = { [45]=true } },
-        { name = "Back",            cat = "Accessories", sub = "BackAccessories",     types = { [46]=true } },
-        { name = "Waist",           cat = "Accessories", sub = "WaistAccessories",    types = { [47]=true } },
-        { name = "Classic Shirts",  cat = "Clothing", sub = "ClassicShirts",  types = { [11]=true } },
-        { name = "Classic T-Shirts",cat = "Clothing", sub = "ClassicTShirts", types = { [2]=true } },
-        { name = "Classic Pants",   cat = "Clothing", sub = "ClassicPants",   types = { [12]=true } },
-        { name = "Gear",            cat = "Gear", types = { [19]=true } },
+        { name = "Accessories", types = { [8]=true, [41]=true, [42]=true, [43]=true, [44]=true, [45]=true, [46]=true, [47]=true } },
+        { name = "Hats", types = { [8]=true } },
+        { name = "Hair", types = { [41]=true } },
+        { name = "Face", types = { [42]=true } },
+        { name = "Neck", types = { [43]=true } },
+        { name = "Shoulder", types = { [44]=true } },
+        { name = "Front", types = { [45]=true } },
+        { name = "Back", types = { [46]=true } },
+        { name = "Waist", types = { [47]=true } },
+        { name = "Classic T-Shirts", types = { [2]=true } },
+        { name = "Classic Shirts", types = { [11]=true } },
+        { name = "Classic Pants", types = { [12]=true } },
+        { name = "Gear", types = { [19]=true } },
     }
-
-    -- price filter chips (catalog only)
-    local PRICES = {
-        { name = "Any price" },
+    local PRICE_FILTERS = {
+        { name = "Any price", query = "" },
         { name = "Free", query = "&MaxPrice=0" },
         { name = "Paid", query = "&MinPrice=1" },
     }
-
-    -- sort chips (catalog only)
     local SORTS = {
-        { name = "Relevance" },
-        { name = "Best selling", q = "&SortType=2" },
-        { name = "Newest",       q = "&SortType=3" },
-        { name = "Price ↑",      q = "&SortType=4" },
-        { name = "Price ↓",      q = "&SortType=5" },
+        { name = "Relevance", value = 1 },
+        { name = "Best selling", value = 2 },
+        { name = "Newest", value = 3 },
+        { name = "Price ↑", value = 4 },
+        { name = "Price ↓", value = 5 },
+    }
+    local CREATOR_TYPES = {
+        { name = "Models", category = "Model" },
+        { name = "Decals", category = "Decal" },
+        { name = "Audio", category = "Audio" },
+        { name = "Plugins", category = "Plugin" },
     }
 
-    local modeIdx, filterIdx, priceIdx, sortIdx, searchToken, selected = 1, 1, 1, 1, 0, nil
-    local page, hasNext, cursors = 1, false, {}   -- cursors[n] = cursor/token for page n
-    local lastCode = "?"                           -- http status of the last request, shown when a search is empty
-    local lastReq  = 0                             -- os.clock() of the last request, for throttling
-    local rungCache = {}                           -- remembers which catalog url variant worked per filter combo
-    local status                                   -- label inside the results grid, created below
+    local function requestJson(url, token)
+        if not httpReq then return nil, "request() unavailable" end
+        local waitFor = lastRequest + REQUEST_GAP - os.clock()
+        if waitFor > 0 then task.wait(waitFor) end
+        if token and token.cancelled then return nil, "search cancelled" end
+        lastRequest = os.clock()
 
-    -- throttled request: spaces requests out, retries on 429, gives up quietly if a newer search started
-    local function getJson(url, token)
-        if not httpReq then return nil end
-        for attempt = 1, 4 do
-            local wait = lastReq + GAP - os.clock()
-            if wait > 0 then task.wait(wait) end
-            if token and token ~= searchToken then return nil end
-            lastReq = os.clock()
+        local ok, response = pcall(httpReq, { Url = url, Method = "GET" })
+        if not ok or not response then return nil, "no response" end
+        local code = tonumber(response.StatusCode)
+        if code == 429 then return nil, "Roblox rate limit (429). Wait a little, then search again." end
+        if code ~= 200 then return nil, "HTTP " .. tostring(code or "?") end
 
-            local ok, res = pcall(httpReq, { Url = url, Method = "GET" })
-            if not ok or not res then lastCode = "no response" return nil end
-            lastCode = tostring(res.StatusCode)
-
-            if res.StatusCode == 429 then
-                if attempt == 4 then return nil end
-                local h = res.Headers
-                local ra = tonumber(h and (h["retry-after"] or h["Retry-After"])) or (2 * attempt)
-                ra = math.clamp(ra, 2, 10)
-                if status and status.Parent then
-                    status.Text = ("rate limited, retrying in %ds..."):format(ra)
-                end
-                task.wait(ra)
-                if token and token ~= searchToken then return nil end
-            else
-                if res.StatusCode ~= 200 then return nil end
-                local ok2, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-                return ok2 and data or nil
-            end
-        end
-        return nil
+        local decoded, data = pcall(HttpService.JSONDecode, HttpService, response.Body)
+        if not decoded then return nil, "invalid JSON response" end
+        return data
     end
 
-    -- top bar: mode | search box | search
-    local top = inst("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1 }, shopPage)
-    local modeBtn = inst("TextButton", {
-        Size = UDim2.fromOffset(90, 30), BackgroundColor3 = ROW, Text = MODES[1].name,
-        TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
-    }, top)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, modeBtn)
-    local goBtn = inst("TextButton", {
-        AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Size = UDim2.fromOffset(70, 30),
-        BackgroundColor3 = RED, Text = "Search", TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
-    }, top)
-    local box = inst("TextBox", {
-        Position = UDim2.fromOffset(96, 0), Size = UDim2.new(1, -172, 1, 0), BackgroundColor3 = ROW,
-        Text = "", PlaceholderText = "search the store...", PlaceholderColor3 = Color3.fromRGB(130, 130, 140),
-        TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13, ClearTextOnFocus = false,
-    }, top)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, box)
+    local function makeStorePage(pageName, isCatalog)
+        local pageFrame = addTab(pageName, false)
+        local state = {
+            query = "", page = 1, cursor = nil, nextCursor = nil,
+            selected = nil, token = nil, busy = false,
+            filter = 1, price = 1, sort = 1, creatorType = 1,
+        }
+        local top = inst("Frame", {
+            Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1,
+        }, pageFrame)
+        local searchBox = inst("TextBox", {
+            Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, -78, 1, 0),
+            BackgroundColor3 = ROW, Text = "", PlaceholderText = isCatalog and "Search avatar catalog..." or "Search Creator Store...",
+            PlaceholderColor3 = Color3.fromRGB(130, 130, 140), TextColor3 = WHITE,
+            Font = Enum.Font.GothamMedium, TextSize = 13, ClearTextOnFocus = false,
+        }, top)
+        inst("UIStroke", { Color = DIM, Thickness = 1 }, searchBox)
+        local searchBtn = inst("TextButton", {
+            AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0),
+            Size = UDim2.fromOffset(72, 30), BackgroundColor3 = RED, Text = "Search",
+            TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
+        }, top)
 
-    -- catalog chips: price, then sort, then category (only visible in Catalog mode)
-    local chips = inst("ScrollingFrame", {
-        Position = UDim2.fromOffset(0, 36), Size = UDim2.new(1, 0, 0, 26),
-        BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
-        ScrollingDirection = Enum.ScrollingDirection.X,
-        CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.X,
-    }, shopPage)
-    inst("UIListLayout", {
-        FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    }, chips)
-    local chipBtns, priceBtns, sortBtns = {}, {}, {}
-
-    -- results grid
-    local results = inst("ScrollingFrame", {
-        Position = UDim2.fromOffset(0, 66), Size = UDim2.new(1, 0, 1, -138),
-        BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
-        CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    }, shopPage)
-    inst("UIGridLayout", {
-        CellSize = UDim2.fromOffset(104, 140), CellPadding = UDim2.fromOffset(6, 6),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    }, results)
-
-    status = label(results, "", WHITE, 13, Enum.Font.GothamMedium)
-    status.Size = UDim2.fromOffset(300, 30) status.TextStrokeTransparency = 1 status.LayoutOrder = -1
-    status.TextXAlignment = Enum.TextXAlignment.Left
-
-    -- pager row
-    local pager = inst("Frame", {
-        AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, -38),
-        Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1,
-    }, shopPage)
-    local function pagerBtn(text, anchorX, xPos)
-        local b = inst("TextButton", {
-            AnchorPoint = Vector2.new(anchorX, 0), Position = UDim2.new(xPos, 0, 0, 0), Size = UDim2.fromOffset(90, 28),
-            BackgroundColor3 = ROW, Text = text, TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
-        }, pager)
-        inst("UIStroke", { Color = DIM, Thickness = 1 }, b)
-        return b
-    end
-    local prevBtn = pagerBtn("◀ Prev", 0, 0)
-    local nextBtn = pagerBtn("Next ▶", 1, 1)
-    local pageLbl = label(pager, "Page 1", WHITE, 13, Enum.Font.GothamMedium)
-    pageLbl.Size = UDim2.fromScale(1, 1) pageLbl.TextStrokeTransparency = 1
-
-    -- bottom action bar
-    local bar = inst("Frame", {
-        AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0),
-        Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = ROW,
-    }, shopPage)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, bar)
-    local selLabel = label(bar, "tap an item to copy its id", WHITE, 12, Enum.Font.GothamMedium)
-    selLabel.Position = UDim2.fromOffset(8, 0) selLabel.Size = UDim2.new(1, -190, 1, 0)
-    selLabel.TextXAlignment = Enum.TextXAlignment.Left selLabel.TextStrokeTransparency = 1
-    selLabel.TextTruncate = Enum.TextTruncate.AtEnd
-
-    local function barBtn(text, xOff, color)
-        local b = inst("TextButton", {
-            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, xOff, 0.5, 0), Size = UDim2.fromOffset(84, 24),
-            BackgroundColor3 = color, Text = text, TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 12,
-        }, bar)
-        inst("UICorner", { CornerRadius = UDim.new(0, 4) }, b)
-        return b
-    end
-    local buyBtn  = barBtn("Get / Buy", -6,  RED)
-    local copyBtn = barBtn("Copy ID",   -96, Color3.fromRGB(70, 70, 80))
-
-    buyBtn.Activated:Connect(function()
-        if not selected then return end
-        pcall(function()
-            if selected.itemType == "Bundle" then
-                Market:PromptBundlePurchase(lp, selected.id)
-            else
-                Market:PromptPurchase(lp, selected.id)
-            end
-        end)
-    end)
-    copyBtn.Activated:Connect(function()
-        if selected and clip then
-            clip(tostring(selected.id))
-            selLabel.Text = "copied " .. selected.id
-        end
-    end)
-
-    local function clearResults()
-        for _, c in ipairs(results:GetChildren()) do
-            if c:IsA("GuiButton") then c:Destroy() end
-        end
-        results.CanvasPosition = Vector2.zero
-    end
-
-    local function updatePager()
-        pageLbl.Text = "Page " .. page
-        prevBtn.TextTransparency = (page > 1) and 0 or 0.6
-        nextBtn.TextTransparency = hasNext and 0 or 0.6
-    end
-
-    -- chips only show in Catalog mode; results grid moves up when they're hidden
-    local function applyLayout()
-        local showChips = MODES[modeIdx].cat == nil
-        chips.Visible = showChips
-        if showChips then
-            results.Position = UDim2.fromOffset(0, 66)
-            results.Size = UDim2.new(1, 0, 1, -138)
-        else
-            results.Position = UDim2.fromOffset(0, 36)
-            results.Size = UDim2.new(1, 0, 1, -108)
-        end
-    end
-
-    local function fmtPrice(pr, st)
-        if pr == nil then return st or "Off sale" end
-        if pr == 0 then return "Free" end
-        return Config.RobuxIcon .. " " .. pr
-    end
-
-    local function setInfo(item, name, priceText)
-        if name then item.name = name end
-        if priceText then item.priceText = priceText end
-        if item.nameLbl and item.nameLbl.Parent then
-            item.nameLbl.Text = item.name or ("id " .. item.id)
-            item.priceLbl.Text = item.priceText or ""
-        end
-    end
-
-    -- puts results whose names contain your search words first (stable within a page)
-    local function rankByName(items, text)
-        local words = {}
-        for w in text:lower():gmatch("%S+") do words[#words + 1] = w end
-        if #words == 0 then return end
-        for i, it in ipairs(items) do
-            local nm = (it.name or ""):lower()
-            local s = 0
-            for _, w in ipairs(words) do
-                if nm:find(w, 1, true) then s += 1 end
-            end
-            it.score, it.idx = s, i
-        end
-        table.sort(items, function(a, b)
-            if a.score ~= b.score then return a.score > b.score end
-            return a.idx < b.idx
-        end)
-    end
-
-    local function addCell(item, order)
-        local cell = inst("TextButton", {
-            LayoutOrder = order, BackgroundColor3 = ROW, Text = "", AutoButtonColor = true,
-        }, results)
-        inst("UIStroke", { Color = DIM, Thickness = 1 }, cell)
-        local kind = item.itemType == "Bundle" and "BundleThumbnail" or "Asset"
-        inst("ImageLabel", {
-            Position = UDim2.fromOffset(4, 4), Size = UDim2.new(1, -8, 0, 82), BackgroundTransparency = 1,
-            Image = ("rbxthumb://type=%s&id=%d&w=150&h=150"):format(kind, item.id),
-        }, cell)
-
-        local n = label(cell, item.name or ("id " .. item.id), WHITE, 11, Enum.Font.GothamMedium)
-        n.Position = UDim2.fromOffset(4, 88) n.Size = UDim2.new(1, -8, 0, 28)
-        n.TextWrapped = true n.TextTruncate = Enum.TextTruncate.AtEnd
-        n.TextXAlignment = Enum.TextXAlignment.Left n.TextYAlignment = Enum.TextYAlignment.Top
-        n.TextStrokeTransparency = 1
-
-        local p = label(cell, item.priceText or "", Color3.fromRGB(235, 80, 80), 11, Enum.Font.GothamBold)
-        p.Position = UDim2.fromOffset(4, 118) p.Size = UDim2.new(1, -8, 0, 16)
-        p.TextXAlignment = Enum.TextXAlignment.Left p.TextStrokeTransparency = 1
-
-        item.nameLbl, item.priceLbl = n, p
-
-        cell.Activated:Connect(function()
-            selected = item
-            local nm = item.name or "?"
-            if clip then
-                clip(tostring(item.id))
-                selLabel.Text = ("copied %d  |  %s"):format(item.id, nm)
-                p.Text = "✔ copied"
-                task.delay(1.2, function()
-                    if p.Parent then p.Text = item.priceText or "" end
-                end)
-            else
-                selLabel.Text = ("%s  [%d]  (no clipboard on this executor)"):format(nm, item.id)
-            end
-        end)
-    end
-
-    -- fills in names for old-endpoint results (they only come back as ids)
-    -- one batch call, then at most 8 single lookups, one at a time so we don't trip the rate limit
-    local function fillNames(items, token)
-        local ids = {}
-        for _, it in ipairs(items) do ids[#ids + 1] = it.id end
-        local d = getJson("https://apis.roblox.com/toolbox-service/v1/items/details?assetIds=" .. table.concat(ids, ","), token)
-        local byId = {}
-        for _, e in ipairs(d and d.data or {}) do
-            local a = e.asset
-            if a and a.id then byId[a.id] = a.name end
-        end
-        if token ~= searchToken then return end
-        for _, it in ipairs(items) do
-            if byId[it.id] then setInfo(it, byId[it.id]) end
-        end
-
-        local n = 0
-        for _, it in ipairs(items) do
-            if token ~= searchToken then return end
-            if not it.name and n < 8 then
-                n += 1
-                local e = getJson(("https://economy.roblox.com/v2/assets/%d/details"):format(it.id), token)
-                if e and e.Name then
-                    setInfo(it, e.Name, e.IsForSale and fmtPrice(e.PriceInRobux) or "Off sale")
-                else
-                    local ok, info = pcall(Market.GetProductInfo, Market, it.id)
-                    if ok and info then
-                        setInfo(it, info.Name, fmtPrice(info.PriceInRobux))
-                    end
-                end
-            end
-        end
-    end
-
-    local function search()
-        searchToken += 1
-        local token = searchToken
-        clearResults()
-        selected = nil
-        selLabel.Text = "tap an item to copy its id"
-        hasNext = false
-        updatePager()
-        if not httpReq then
-            status.Text = "your executor has no request() function"
-            return
-        end
-        status.Text = "loading..."
-        task.spawn(function()
-            local text = (box.Text:gsub("^%s+", ""):gsub("%s+$", ""))
-            local kw = HttpService:UrlEncode(text)
-            local mode = MODES[modeIdx]
-            local items, more, needNames, limited = {}, false, false, false
-
-            if mode.cat then
-                -- 1) current creator store search (returns names)
-                local url = ("https://apis.roblox.com/toolbox-service/v2/assets:search?searchCategoryType=%s&query=%s&maxPageSize=%d")
-                    :format(mode.cat, kw, PAGE_SIZE)
-                if cursors[page] and cursors[page] ~= "" then
-                    url ..= "&pageToken=" .. HttpService:UrlEncode(cursors[page])
-                end
-                local d = getJson(url, token)
-                if lastCode == "429" then limited = true end
-                for _, e in ipairs(d and d.creatorStoreAssets or {}) do
-                    local a = e.asset
-                    if a and a.id then
-                        items[#items + 1] = { id = a.id, itemType = "Asset", name = a.name, priceText = "" }
-                    end
-                end
-                if #items > 0 then
-                    if d.nextPageToken and d.nextPageToken ~= "" then
-                        cursors[page + 1] = d.nextPageToken
-                        more = true
-                    end
-                elseif not limited then
-                    -- 2) fallback: old endpoint (pageNumber starts at 0, explicit relevance sort)
-                    local d2 = getJson(("https://apis.roblox.com/toolbox-service/v1/marketplace/%d?keyword=%s&limit=%d&pageNumber=%d&sortType=Relevance")
-                        :format(mode.toolbox, kw, PAGE_SIZE, page - 1), token)
-                    if lastCode == "429" then limited = true end
-                    for _, e in ipairs(d2 and d2.data or {}) do
-                        items[#items + 1] = { id = e.id, itemType = "Asset", priceText = "" }
-                    end
-                    more = #items >= PAGE_SIZE
-                    needNames = true
-                end
-            else
-                -- catalog: ladder from most specific to a bare keyword search. every rung is its own full url,
-                -- the last one is just Keyword + Limit=30 so a rejected param can never leave you with nothing.
-                -- server = true means roblox enforces the category, so we don't second-guess it client side.
-                local f, pf, sf = FILTERS[filterIdx], PRICES[priceIdx], SORTS[sortIdx]
-                local api  = "https://catalog.roblox.com/v1/search/items/details?Keyword=" .. kw
-                local big  = api .. "&Limit=" .. CAT_PAGE
-                local sq, pq = sf.q or "", pf.query or ""
-                local catQ = f.cat and ("&Category=" .. f.cat) or ""
-                local subQ = f.sub and ("&Subcategory=" .. f.sub) or ""
-
-                local attempts = {}
-                local function add(url, server) attempts[#attempts + 1] = { url = url, server = server } end
-                if f.cat then
-                    if f.sub then add(big .. "&SalesTypeFilter=1" .. sq .. pq .. catQ .. subQ, true) end
-                    add(big .. "&SalesTypeFilter=1" .. sq .. pq .. catQ, f.sub == nil)
-                    if f.sub then add(big .. sq .. pq .. catQ .. subQ, true) end
-                    add(big .. sq .. pq .. catQ, f.sub == nil)
-                    add(api .. "&Limit=30" .. catQ .. subQ, true)
-                    add(api .. "&Limit=30" .. catQ, f.sub == nil)
-                else
-                    add(big .. "&SalesTypeFilter=1" .. sq .. pq, true)
-                    add(big .. sq .. pq, true)
-                end
-                add(api .. "&Limit=30", f.cat == nil)   -- bare fallback, works without any extra params
-
-                local key = filterIdx .. "|" .. priceIdx .. "|" .. sortIdx
-                local useIdx
-                local cursor = cursors[page]
-                local tries = 0
-                repeat
-                    tries += 1
-                    local curs = ""
-                    if cursor and cursor ~= "" then curs = "&Cursor=" .. HttpService:UrlEncode(cursor) end
-
-                    local d
-                    if useIdx then
-                        d = getJson(attempts[useIdx].url .. curs, token)
-                        if not d and lastCode == "429" then limited = true end
-                    else
-                        -- try the rung that worked last time first, then the rest in order
-                        local order, c = {}, rungCache[key]
-                        if c and attempts[c] then order[1] = c end
-                        for i = 1, #attempts do if i ~= c then order[#order + 1] = i end end
-                        for n, i in ipairs(order) do
-                            local r = getJson(attempts[i].url .. curs, token)
-                            if token ~= searchToken then return end
-                            -- a 429 means stop climbing the ladder, more requests would only make it worse
-                            if not r and lastCode == "429" then limited = true break end
-                            if r and (#(r.data or {}) > 0 or n == #order) then
-                                d, useIdx = r, i
-                                rungCache[key] = i
-                                break
-                            end
-                        end
-                    end
-                    if token ~= searchToken then return end
-                    if not d then cursor = nil break end
-
-                    local a = attempts[useIdx]
-                    for _, e in ipairs(d.data or {}) do
-                        local pr = e.price
-                        if pr == nil then pr = e.lowestPrice end
-                        local keep = true
-                        if not a.server and f.types then
-                            if e.itemType == "Bundle" then
-                                keep = false
-                            elseif e.assetType ~= nil and not f.types[e.assetType] then
-                                keep = false
-                            end
-                        end
-                        if keep and priceIdx == 2 and pr ~= nil and pr > 0 then keep = false end
-                        if keep and priceIdx == 3 and pr ~= nil and pr == 0 then keep = false end
-                        if keep then
-                            items[#items + 1] = {
-                                id = e.id, itemType = e.itemType, name = e.name,
-                                priceText = fmtPrice(pr, e.priceStatus),
-                            }
-                        end
-                    end
-                    cursor = d.nextPageCursor
-                until #items >= CAT_MIN or not cursor or cursor == "" or tries >= CAT_TRIES or limited
-
-                if cursor and cursor ~= "" then
-                    cursors[page + 1] = cursor
-                    more = true
-                end
-            end
-
-            if token ~= searchToken then return end
-            hasNext = more
-            updatePager()
-            if #items == 0 then
-                if limited or lastCode == "429" then
-                    status.Text = "roblox rate limited you (429). wait ~30s, then search again"
-                else
-                    status.Text = "no results (http " .. lastCode .. ")"
-                end
-                return
-            end
-            status.Text = ""
-            -- name ranking only when sorting by relevance, otherwise it would scramble best selling / price sorts
-            if not needNames and (mode.cat or sortIdx == 1) then rankByName(items, text) end
-            for i, it in ipairs(items) do addCell(it, i) end
-            if needNames then fillNames(items, token) end
-        end)
-    end
-
-    local function newSearch()
-        page, cursors = 1, {}
-        search()
-    end
-
-    -- build the chips
-    local function refreshChips()
-        for i, b in ipairs(chipBtns) do b.BackgroundColor3 = (i == filterIdx) and RED or ROW end
-        for i, b in ipairs(priceBtns) do b.BackgroundColor3 = (i == priceIdx) and RED or ROW end
-        for i, b in ipairs(sortBtns) do b.BackgroundColor3 = (i == sortIdx) and RED or ROW end
-    end
-    local function makeChip(text, order, onTap)
-        local b = inst("TextButton", {
-            LayoutOrder = order, Size = UDim2.fromOffset(0, 26), AutomaticSize = Enum.AutomaticSize.X,
-            BackgroundColor3 = ROW, Text = text, TextColor3 = WHITE,
-            Font = Enum.Font.GothamMedium, TextSize = 12, AutoButtonColor = false,
+        local chips = inst("ScrollingFrame", {
+            Position = UDim2.fromOffset(0, 36), Size = UDim2.new(1, 0, 0, 27),
+            BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
+            ScrollingDirection = Enum.ScrollingDirection.X,
+            CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.X,
+        }, pageFrame)
+        inst("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5),
+            SortOrder = Enum.SortOrder.LayoutOrder,
         }, chips)
-        inst("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, b)
-        inst("UICorner", { CornerRadius = UDim.new(0, 5) }, b)
-        inst("UIStroke", { Color = DIM, Thickness = 1 }, b)
-        b.Activated:Connect(onTap)
-        return b
-    end
-    for i, p in ipairs(PRICES) do
-        priceBtns[i] = makeChip(p.name, i, function()
-            if priceIdx == i then return end
-            priceIdx = i
-            refreshChips()
-            newSearch()
-        end)
-    end
-    for i, s in ipairs(SORTS) do
-        sortBtns[i] = makeChip(s.name, 10 + i, function()
-            if sortIdx == i then return end
-            sortIdx = i
-            refreshChips()
-            newSearch()
-        end)
-    end
-    for i, f in ipairs(FILTERS) do
-        chipBtns[i] = makeChip(f.name, 30 + i, function()
-            if filterIdx == i then return end
-            filterIdx = i
-            refreshChips()
-            newSearch()
-        end)
-    end
-    refreshChips()
-    applyLayout()
 
-    modeBtn.Activated:Connect(function()
-        modeIdx = modeIdx % #MODES + 1
-        modeBtn.Text = MODES[modeIdx].name
-        applyLayout()
-        newSearch()
-    end)
-    goBtn.Activated:Connect(newSearch)
-    box.FocusLost:Connect(function(enter) if enter then newSearch() end end)
-    prevBtn.Activated:Connect(function() if page > 1 then page -= 1 search() end end)
-    nextBtn.Activated:Connect(function() if hasNext then page += 1 search() end end)
-    updatePager()
+        local chipButtons = {}
+        local function addChip(text, order, callback)
+            local b = inst("TextButton", {
+                LayoutOrder = order, Size = UDim2.fromOffset(0, 26),
+                AutomaticSize = Enum.AutomaticSize.X, BackgroundColor3 = ROW,
+                Text = text, TextColor3 = WHITE, Font = Enum.Font.GothamMedium,
+                TextSize = 12, AutoButtonColor = false,
+            }, chips)
+            inst("UIPadding", {
+                PaddingLeft = UDim.new(0, 9), PaddingRight = UDim.new(0, 9),
+            }, b)
+            inst("UICorner", { CornerRadius = UDim.new(0, 5) }, b)
+            inst("UIStroke", { Color = DIM, Thickness = 1 }, b)
+            b.Activated:Connect(callback)
+            chipButtons[#chipButtons + 1] = b
+            return b
+        end
+
+        local function refreshChips()
+            for i, b in ipairs(chipButtons) do
+                local active = false
+                if isCatalog then
+                    if i <= #PRICE_FILTERS then
+                        active = i == state.price
+                    elseif i <= #PRICE_FILTERS + #SORTS then
+                        active = i - #PRICE_FILTERS == state.sort
+                    else
+                        active = i - #PRICE_FILTERS - #SORTS == state.filter
+                    end
+                else
+                    active = i == state.creatorType
+                end
+                b.BackgroundColor3 = active and RED or ROW
+            end
+        end
+
+        if isCatalog then
+            for i, item in ipairs(PRICE_FILTERS) do
+                addChip(item.name, i, function()
+                    state.price = i
+                    refreshChips()
+                    state.page = 1
+                    state.cursor = nil
+                    state.nextCursor = nil
+                    state.token = nil
+                    -- Search is defined below.
+                    searchBox:ReleaseFocus()
+                    searchBtn:Activate()
+                end)
+            end
+            for i, item in ipairs(SORTS) do
+                addChip(item.name, 10 + i, function()
+                    state.sort = i
+                    refreshChips()
+                    state.page = 1
+                    state.cursor = nil
+                    state.nextCursor = nil
+                    state.token = nil
+                    searchBtn:Activate()
+                end)
+            end
+            for i, item in ipairs(FILTERS) do
+                addChip(item.name, 30 + i, function()
+                    state.filter = i
+                    refreshChips()
+                    state.page = 1
+                    state.cursor = nil
+                    state.nextCursor = nil
+                    state.token = nil
+                    searchBtn:Activate()
+                end)
+            end
+        else
+            for i, item in ipairs(CREATOR_TYPES) do
+                addChip(item.name, i, function()
+                    state.creatorType = i
+                    refreshChips()
+                    state.page = 1
+                    state.cursor = nil
+                    state.nextCursor = nil
+                    state.token = nil
+                    searchBtn:Activate()
+                end)
+            end
+        end
+        refreshChips()
+
+        local results = inst("ScrollingFrame", {
+            Position = UDim2.fromOffset(0, 66), Size = UDim2.new(1, 0, 1, -138),
+            BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
+            CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        }, pageFrame)
+        inst("UIGridLayout", {
+            CellSize = UDim2.fromOffset(104, 140), CellPadding = UDim2.fromOffset(6, 6),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+        }, results)
+        local status = label(results, "Search for an item above.", WHITE, 13, Enum.Font.GothamMedium)
+        status.Size = UDim2.fromOffset(360, 30)
+        status.TextStrokeTransparency = 1
+        status.LayoutOrder = -1
+        status.TextXAlignment = Enum.TextXAlignment.Left
+
+        local pager = inst("Frame", {
+            AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, -38),
+            Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1,
+        }, pageFrame)
+        local prevBtn = inst("TextButton", {
+            Size = UDim2.fromOffset(90, 28), BackgroundColor3 = ROW, Text = "◀ Prev",
+            TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
+        }, pager)
+        local nextBtn = inst("TextButton", {
+            AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0),
+            Size = UDim2.fromOffset(90, 28), BackgroundColor3 = ROW, Text = "Next ▶",
+            TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
+        }, pager)
+        local pageLabel = label(pager, "Page 1", WHITE, 13, Enum.Font.GothamMedium)
+        pageLabel.Size = UDim2.fromScale(1, 1)
+        pageLabel.TextStrokeTransparency = 1
+
+        local actionBar = inst("Frame", {
+            AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0),
+            Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = ROW,
+        }, pageFrame)
+        inst("UIStroke", { Color = DIM, Thickness = 1 }, actionBar)
+        local selectedLabel = label(actionBar, "Select an item to see its ID.", WHITE, 12, Enum.Font.GothamMedium)
+        selectedLabel.Position = UDim2.fromOffset(8, 0)
+        selectedLabel.Size = UDim2.new(1, -190, 1, 0)
+        selectedLabel.TextXAlignment = Enum.TextXAlignment.Left
+        selectedLabel.TextStrokeTransparency = 1
+        selectedLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        local copyBtn = inst("TextButton", {
+            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -96, 0.5, 0),
+            Size = UDim2.fromOffset(84, 24), BackgroundColor3 = DIM,
+            Text = "Copy ID", TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 12,
+        }, actionBar)
+        local actionBtn = inst("TextButton", {
+            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0),
+            Size = UDim2.fromOffset(84, 24), BackgroundColor3 = RED,
+            Text = isCatalog and "Get / Buy" or "Open ID", TextColor3 = WHITE,
+            Font = Enum.Font.GothamMedium, TextSize = 12,
+        }, actionBar)
+
+        local function clearResults()
+            for _, child in ipairs(results:GetChildren()) do
+                if child:IsA("GuiButton") then child:Destroy() end
+            end
+            results.CanvasPosition = Vector2.zero
+        end
+
+        local function addResult(item, order)
+            local card = inst("TextButton", {
+                LayoutOrder = order, BackgroundColor3 = ROW, Text = "",
+                AutoButtonColor = true,
+            }, results)
+            inst("UIStroke", { Color = DIM, Thickness = 1 }, card)
+            local thumbType = item.itemType == "Bundle" and "BundleThumbnail" or "Asset"
+            inst("ImageLabel", {
+                Position = UDim2.fromOffset(4, 4), Size = UDim2.new(1, -8, 0, 82),
+                BackgroundTransparency = 1,
+                Image = ("rbxthumb://type=%s&id=%d&w=150&h=150"):format(thumbType, item.id),
+            }, card)
+            local name = label(card, item.name or ("ID " .. item.id), WHITE, 11, Enum.Font.GothamMedium)
+            name.Position = UDim2.fromOffset(4, 88)
+            name.Size = UDim2.new(1, -8, 0, 28)
+            name.TextWrapped = true
+            name.TextTruncate = Enum.TextTruncate.AtEnd
+            name.TextXAlignment = Enum.TextXAlignment.Left
+            name.TextYAlignment = Enum.TextYAlignment.Top
+            name.TextStrokeTransparency = 1
+            local price = label(card, item.priceText or "", Color3.fromRGB(235, 80, 80), 11, Enum.Font.GothamBold)
+            price.Position = UDim2.fromOffset(4, 118)
+            price.Size = UDim2.new(1, -8, 0, 16)
+            price.TextXAlignment = Enum.TextXAlignment.Left
+            price.TextStrokeTransparency = 1
+            card.Activated:Connect(function()
+                state.selected = item
+                selectedLabel.Text = ("%s  [%d]"):format(item.name or "Selected item", item.id)
+                if clip then
+                    pcall(clip, tostring(item.id))
+                    selectedLabel.Text = "Copied ID " .. tostring(item.id)
+                end
+            end)
+        end
+
+        local function updatePager()
+            pageLabel.Text = "Page " .. state.page
+            prevBtn.TextTransparency = state.page > 1 and 0 or 0.55
+            nextBtn.TextTransparency = state.nextCursor and 0 or 0.55
+        end
+
+        local function runSearch()
+            if state.busy then return end
+            state.busy = true
+            local token = { cancelled = false }
+            if state.token then state.token.cancelled = true end
+            state.token = token
+            clearResults()
+            state.selected = nil
+            selectedLabel.Text = "Select an item to see its ID."
+            status.Text = "Loading..."
+            state.nextCursor = nil
+            updatePager()
+
+            task.spawn(function()
+                local query = searchBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+                local encoded = HttpService:UrlEncode(query)
+                local items = {}
+                local nextCursor
+                local data, err
+
+                if isCatalog then
+                    local sort = SORTS[state.sort].value
+                    local url = "https://catalog.roblox.com/v1/search/items/details?Keyword=" ..
+                        encoded .. "&Limit=30&SortType=" .. tostring(sort) ..
+                        PRICE_FILTERS[state.price].query
+                    if state.cursor and state.cursor ~= "" then
+                        url ..= "&Cursor=" .. HttpService:UrlEncode(state.cursor)
+                    end
+                    data, err = requestJson(url, token)
+                    if data then
+                        for _, entry in ipairs(data.data or {}) do
+                            local assetType = tonumber(entry.assetType)
+                            local allowed = FILTERS[state.filter].types
+                            local priceValue = entry.price
+                            if priceValue == nil then priceValue = entry.lowestPrice end
+                            local keep = not allowed or (assetType and allowed[assetType])
+                            if state.price == 2 and priceValue ~= nil and priceValue ~= 0 then keep = false end
+                            if state.price == 3 and priceValue == 0 then keep = false end
+                            if keep and entry.id then
+                                items[#items + 1] = {
+                                    id = tonumber(entry.id), name = entry.name,
+                                    itemType = entry.itemType or "Asset",
+                                    priceText = priceValue == 0 and "Free" or
+                                        (priceValue and (Config.RobuxIcon .. " " .. tostring(priceValue)) or "Off sale"),
+                                }
+                            end
+                        end
+                        nextCursor = data.nextPageCursor
+                    end
+                else
+                    local creatorType = CREATOR_TYPES[state.creatorType]
+                    local url = ("https://apis.roblox.com/toolbox-service/v2/assets:search?searchCategoryType=%s&query=%s&maxPageSize=30")
+                        :format(creatorType.category, encoded)
+                    if state.cursor and state.cursor ~= "" then
+                        url ..= "&pageToken=" .. HttpService:UrlEncode(state.cursor)
+                    end
+                    data, err = requestJson(url, token)
+                    if data then
+                        for _, entry in ipairs(data.creatorStoreAssets or {}) do
+                            local asset = entry.asset
+                            if asset and asset.id then
+                                items[#items + 1] = {
+                                    id = tonumber(asset.id), name = asset.name,
+                                    itemType = "Asset", priceText = "Creator Store",
+                                }
+                            end
+                        end
+                        nextCursor = data.nextPageToken
+                    end
+                end
+
+                if token.cancelled then state.busy = false return end
+                if not data then
+                    status.Text = err or "Search failed."
+                    state.busy = false
+                    updatePager()
+                    return
+                end
+
+                state.nextCursor = (nextCursor and nextCursor ~= "") and nextCursor or nil
+                updatePager()
+                if #items == 0 then
+                    status.Text = "No results found."
+                else
+                    status.Text = ""
+                    for i, item in ipairs(items) do
+                        if item.id then addResult(item, i) end
+                    end
+                end
+                state.busy = false
+            end)
+        end
+
+        local function resetAndSearch()
+            state.page = 1
+            state.cursor = nil
+            state.nextCursor = nil
+            runSearch()
+        end
+
+        searchBtn.Activated:Connect(resetAndSearch)
+        searchBox.FocusLost:Connect(function(enterPressed)
+            if enterPressed then resetAndSearch() end
+        end)
+        prevBtn.Activated:Connect(function()
+            if state.page <= 1 or state.busy then return end
+            state.page -= 1
+            state.cursor = nil
+            -- Previous-page cursor is retained in the cursor stack below.
+            state.cursor = state.pageCursors and state.pageCursors[state.page] or nil
+            runSearch()
+        end)
+        nextBtn.Activated:Connect(function()
+            if not state.nextCursor or state.busy then return end
+            state.pageCursors = state.pageCursors or {}
+            state.pageCursors[state.page + 1] = state.nextCursor
+            state.cursor = state.nextCursor
+            state.page += 1
+            runSearch()
+        end)
+        copyBtn.Activated:Connect(function()
+            if state.selected and clip then
+                pcall(clip, tostring(state.selected.id))
+                selectedLabel.Text = "Copied ID " .. tostring(state.selected.id)
+            end
+        end)
+        actionBtn.Activated:Connect(function()
+            local item = state.selected
+            if not item then return end
+            if isCatalog then
+                pcall(function()
+                    if item.itemType == "Bundle" then
+                        Market:PromptBundlePurchase(lp, item.id)
+                    else
+                        Market:PromptPurchase(lp, item.id)
+                    end
+                end)
+            elseif clip then
+                pcall(clip, tostring(item.id))
+                selectedLabel.Text = "Copied Creator Store ID " .. tostring(item.id)
+            end
+        end)
+        state.pageCursors = {}
+        updatePager()
+    end
+
+    makeStorePage("🛍 Catalog", true)
+    makeStorePage("🧰 Creator Store", false)
 end
 
 -- Settings tab
@@ -1293,4 +1178,4 @@ inputConn = UserInputService.InputBegan:Connect(function(input, gpe)
     elseif input.KeyCode == Config.ExitKey then
         unload()
     end
-end
+end)
