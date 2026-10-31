@@ -1293,4 +1293,4 @@ inputConn = UserInputService.InputBegan:Connect(function(input, gpe)
     elseif input.KeyCode == Config.ExitKey then
         unload()
     end
-end)
+end
