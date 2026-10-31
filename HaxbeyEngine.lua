@@ -361,7 +361,7 @@ do
     local shopPage = addTab("🛒 Shop", false)
 
     local PAGE_SIZE = 30   -- creator store modes
-    local CAT_PAGE  = 60   -- catalog items per request (roblox allows 10/28/30/60/120)
+    local CAT_PAGE  = 60   -- catalog items per request on the specific attempts
     local CAT_MIN   = 24   -- auto-load more pages until we have at least this many cards
     local CAT_TRIES = 4    -- max requests per page
     local MODES = {
@@ -409,11 +409,14 @@ do
 
     local modeIdx, filterIdx, priceIdx, sortIdx, searchToken, selected = 1, 1, 1, 1, 0, nil
     local page, hasNext, cursors = 1, false, {}   -- cursors[n] = cursor/token for page n
+    local lastCode = "?"                           -- http status of the last request, shown when a search is empty
 
     local function getJson(url)
         if not httpReq then return nil end
         local ok, res = pcall(httpReq, { Url = url, Method = "GET" })
-        if not ok or not res or res.StatusCode ~= 200 then return nil end
+        if not ok or not res then lastCode = "no response" return nil end
+        lastCode = tostring(res.StatusCode)
+        if res.StatusCode ~= 200 then return nil end
         local ok2, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
         return ok2 and data or nil
     end
@@ -703,22 +706,30 @@ do
                     needNames = true
                 end
             else
-                -- catalog: ladder of attempts from most specific to least, so the server does the filtering when it can
+                -- catalog: ladder from most specific to a bare keyword search. every rung is its own full url,
+                -- the last one is just Keyword + Limit=30 so a rejected param can never leave you with nothing.
+                -- server = true means roblox enforces the category, so we don't second-guess it client side.
                 local f, pf, sf = FILTERS[filterIdx], PRICES[priceIdx], SORTS[sortIdx]
-                local base = ("https://catalog.roblox.com/v1/search/items/details?Keyword=%s&Limit=%d&SalesTypeFilter=1")
-                    :format(kw, CAT_PAGE)
+                local api  = "https://catalog.roblox.com/v1/search/items/details?Keyword=" .. kw
+                local big  = api .. "&Limit=" .. CAT_PAGE
                 local sq, pq = sf.q or "", pf.query or ""
                 local catQ = f.cat and ("&Category=" .. f.cat) or ""
                 local subQ = f.sub and ("&Subcategory=" .. f.sub) or ""
 
-                -- server = true means roblox enforces the category, so we don't second-guess it client side
                 local attempts = {}
+                local function add(url, server) attempts[#attempts + 1] = { url = url, server = server } end
                 if f.cat then
-                    if f.sub then attempts[#attempts + 1] = { url = base .. sq .. pq .. catQ .. subQ, server = true } end
-                    attempts[#attempts + 1] = { url = base .. sq .. pq .. catQ, server = (f.sub == nil) }
+                    if f.sub then add(big .. "&SalesTypeFilter=1" .. sq .. pq .. catQ .. subQ, true) end
+                    add(big .. "&SalesTypeFilter=1" .. sq .. pq .. catQ, f.sub == nil)
+                    if f.sub then add(big .. sq .. pq .. catQ .. subQ, true) end
+                    add(big .. sq .. pq .. catQ, f.sub == nil)
+                    add(api .. "&Limit=30" .. catQ .. subQ, true)
+                    add(api .. "&Limit=30" .. catQ, f.sub == nil)
+                else
+                    add(big .. "&SalesTypeFilter=1" .. sq .. pq, true)
+                    add(big .. sq .. pq, true)
                 end
-                attempts[#attempts + 1] = { url = base .. sq .. pq, server = (f.cat == nil) }
-                attempts[#attempts + 1] = { url = base, server = (f.cat == nil) }
+                add(api .. "&Limit=30", f.cat == nil)   -- bare fallback, works without any extra params
 
                 local useIdx
                 local cursor = cursors[page]
@@ -734,8 +745,9 @@ do
                     else
                         for i, a in ipairs(attempts) do
                             local r = getJson(a.url .. curs)
-                            -- accept the first attempt that answers with rows (or the last one regardless)
-                            if r and (#(r.data or {}) > 0 or i == #attempts or curs ~= "") then
+                            if token ~= searchToken then return end
+                            -- take the first rung that answers with rows (or the last rung regardless)
+                            if r and (#(r.data or {}) > 0 or i == #attempts) then
                                 d, useIdx = r, i
                                 break
                             end
@@ -778,7 +790,7 @@ do
             hasNext = more
             updatePager()
             if #items == 0 then
-                status.Text = "no results (or the request got blocked)"
+                status.Text = "no results (http " .. lastCode .. ")"
                 return
             end
             status.Text = ""
