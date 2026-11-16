@@ -1,1194 +1,1786 @@
--- config (everything off by default, flip them in the menu)
+-- Made by ByHAXBEY(Furkan): https://t.me/zxroorj
+-- haxbey engine | Rayfield UI
+-- Not run or tested.
+--
+-- Remote search:
+--   Searches the entire client-visible game instance tree.
+--   Does not read server-only files, ServerStorage contents, or server scripts.
+--   Type comma-separated or newline-separated remote names in Character.
+--   Exact matching is the default. All matching instances are targeted.
+--   Optional full paths can be entered instead of names.
+--   Newly replicated remotes are indexed automatically.
+--
+-- BlockSnap:
+--   Outgoing: drops FireServer / InvokeServer calls to matched remotes.
+--   Incoming: disables accessible OnClientEvent listeners on matched events.
+--   Refreshes matching/listeners every 1.5 seconds.
+--   Changing the search restores listeners on remotes no longer matched.
+--   Off/unload restores owned listeners and attempts hook removal.
+--
+-- This does not identify what a remote actually does.
+-- Blocking a name does not guarantee it controls rubberbanding.
+-- Direct server position replication is unaffected.
+-- Server-side movement checks are unaffected.
+-- Executor hook/listener support varies.
+-- No remote spy is embedded.
+-- Catalog/store endpoint parameters remain unverified.
+
 local Config = {
-    Enabled = true,  TeamCheck = false,
-    Box = false, Health = false, Name = false, Item = false, Dist = false,
-    Bones = false, RootDot = false,
-    Warn = false, Counter = false, Fps = false,
+    Enabled = false,
+    TeamCheck = false,
+    Box = false,
+    Health = false,
+    Name = false,
+    Item = false,
+    Dist = false,
+    Bones = false,
+    RootDot = false,
+    Warn = false,
+    Counter = false,
+    Fps = false,
 
-    -- character mods (value + enable flag)
-    SpeedOn = false, Speed = 16, SpeedBypass = false,
-    JumpOn  = false, Jump  = 50,
-    GravOn  = false, Grav  = 196,
-    HeadOn  = false, Head  = 1,
-    TransOn = false, Trans = 0,
+    SpeedOn = false,
+    Speed = 16,
 
-    -- auto-aim config
-    AimEnabled   = false,
-    SilentAim    = false,
-    CharLock     = false,
-    CamLock      = false,
-    VisCheck     = false,
+    BlockSnap = false,
+    SnapRemoteNames = "", -- FILL: or type names in Character > Remote search
+    SnapExactMatch = true,
+    SnapIgnoreCase = true,
+    SnapBlockOutgoing = true,
+    SnapBlockIncoming = true,
+    SnapCheckInterval = 1.5,
+
+    JumpOn = false,
+    Jump = 50,
+    GravOn = false,
+    Grav = 196,
+    HeadOn = false,
+    Head = 1,
+    TransOn = false,
+    Trans = 0,
+
+    AimEnabled = false,
+    ShowFov = false,
+    SilentAim = false,
+    CharLock = false,
+    CamLock = false,
+    VisCheck = false,
     PredictionOn = false,
-    PredictionVal= 0.1,
-    AimFov       = 150,
-    AimDist      = 500,
-    AimSmooth    = 1,
+    PredictionVal = 0.1,
+    AimFov = 150,
+    AimDist = 500,
+    AimSmooth = 1,
 
-    MaxDistance  = 2000,
-    BoxColor     = Color3.fromRGB(255, 50, 50),
-    NameColor    = Color3.fromRGB(204, 170, 0),
-    ItemColor    = Color3.fromRGB(0, 60, 200),
-    DistColor    = Color3.fromRGB(255, 255, 255),
-    VisColor     = Color3.fromRGB(0, 255, 0),
-    HiddenColor  = Color3.fromRGB(255, 0, 0),
-    TextSize     = 13,
+    MaxDistance = 2000,
+    CountRadius = 500,
+    TextSize = 13,
+    BoxColor = Color3.fromRGB(255, 50, 50),
+    NameColor = Color3.fromRGB(204, 170, 0),
+    ItemColor = Color3.fromRGB(0, 60, 200),
+    DistColor = Color3.new(1, 1, 1),
+    VisColor = Color3.fromRGB(0, 255, 0),
+    HiddenColor = Color3.fromRGB(255, 0, 0),
 
-    WarnAngleDeg = 8,    WarnMaxDist = 500,   WarnNeedLOS = true,
-    WarnY        = 0.05, WarnTextSize = 30,   WarnFlip = 0.8,
-    WarnColorA   = Color3.fromRGB(255, 220, 0),
-    WarnColorB   = Color3.fromRGB(255, 0, 0),
-    WarnText     = "⚠️ ENEMY IS AIMING AT YOU ⚠️",
+    WarnAngleDeg = 8,
+    WarnMaxDist = 500,
+    WarnNeedLOS = true,
+    WarnY = 0.05,
+    WarnTextSize = 30,
+    WarnFlip = 0.8,
+    WarnColorA = Color3.fromRGB(255, 220, 0),
+    WarnColorB = Color3.fromRGB(255, 0, 0),
+    WarnText = "ENEMY IS AIMING AT YOU",
+    HudY = 0.12,
+    HudTextSize = 18,
 
-    CountRadius  = 500,  HudY = 0.12,  HudTextSize = 18,
-    HudBg        = Color3.fromRGB(45, 25, 25),
-    HudBorder    = Color3.fromRGB(200, 40, 40),
+    MenuTitle = "haxbey engine",
+    TitleIcon = "", -- FILL: optional unicode
+    RobuxIcon = "R$", -- FILL: optional unicode
+    KickMessage = "left via haxbey engine",
+    OpenImage = "rbxassetid://138765108919147",
+    OpenWidth = 120,
+    MenuKey = Enum.KeyCode.RightShift,
+    ExitKey = Enum.KeyCode.End,
 
-    MenuTitle    = "haxbey engine",
-    TitleIcon    = "",     -- FILL: paste your unicode between the quotes, shows next to the title
-    RobuxIcon    = "R$",   -- FILL: paste your robux unicode here, used on every price
-    KickMessage  = "left via haxbey engine",   -- shown on the disconnect screen when you kick yourself
-    MenuKey      = Enum.KeyCode.RightShift,
-    ExitKey      = Enum.KeyCode.End,
+    HttpGap = 1.2,
+    HttpRetries = 4,
+    RayfieldUrl = "https://sirius.menu/rayfield",
 }
 
-local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local CoreGui = game:GetService("CoreGui")
 
-local lp  = Players.LocalPlayer
+local lp = Players.LocalPlayer
+local env = (getgenv and getgenv()) or _G
+local httpRequest = request or http_request
+    or (syn and syn.request)
+    or (http and http.request)
+local clipboard = setclipboard or toclipboard
+
+if type(env.HaxbeyEngineUnload) == "function" then
+    pcall(env.HaxbeyEngineUnload)
+end
+
+assert(Drawing and Drawing.new, "haxbey engine requires Drawing.new")
+assert(loadstring, "haxbey engine requires loadstring")
+
+local RedTheme = {
+    TextColor = Color3.fromRGB(240, 240, 240),
+    Background = Color3.fromRGB(15, 15, 18),
+    Topbar = Color3.fromRGB(30, 17, 20),
+    Shadow = Color3.fromRGB(8, 8, 10),
+    NotificationBackground = Color3.fromRGB(22, 22, 25),
+    NotificationActionsBackground = Color3.fromRGB(45, 30, 35),
+    TabBackground = Color3.fromRGB(35, 35, 40),
+    TabStroke = Color3.fromRGB(55, 55, 60),
+    TabBackgroundSelected = Color3.fromRGB(180, 40, 45),
+    TabTextColor = Color3.fromRGB(220, 220, 220),
+    SelectedTabTextColor = Color3.new(1, 1, 1),
+    ElementBackground = Color3.fromRGB(27, 27, 31),
+    ElementBackgroundHover = Color3.fromRGB(35, 35, 40),
+    SecondaryElementBackground = Color3.fromRGB(23, 23, 27),
+    ElementStroke = Color3.fromRGB(55, 55, 60),
+    SecondaryElementStroke = Color3.fromRGB(45, 45, 50),
+    SliderBackground = Color3.fromRGB(105, 30, 35),
+    SliderProgress = Color3.fromRGB(205, 45, 50),
+    SliderStroke = Color3.fromRGB(230, 65, 70),
+    ToggleBackground = Color3.fromRGB(30, 30, 35),
+    ToggleEnabled = Color3.fromRGB(205, 45, 50),
+    ToggleDisabled = Color3.fromRGB(80, 80, 85),
+    ToggleEnabledStroke = Color3.fromRGB(230, 65, 70),
+    ToggleDisabledStroke = Color3.fromRGB(100, 100, 105),
+    ToggleEnabledOuterStroke = Color3.fromRGB(80, 25, 30),
+    ToggleDisabledOuterStroke = Color3.fromRGB(50, 50, 55),
+    DropdownSelected = Color3.fromRGB(55, 25, 30),
+    DropdownUnselected = Color3.fromRGB(30, 30, 35),
+    InputBackground = Color3.fromRGB(25, 25, 30),
+    InputStroke = Color3.fromRGB(65, 65, 70),
+    PlaceholderColor = Color3.fromRGB(150, 150, 155),
+}
+
+local Rayfield = loadstring(game:HttpGet(Config.RayfieldUrl))()
+
+local alive = true
+local connections, drawings, tracked, toggles = {}, {}, {}, {}
+local browserStates = {}
+local savedProperties, changedTransparency = {}, {}
+local originalGravity, lastCharacter, overlay
 local cam = workspace.CurrentCamera
+local renderName = "haxbey_engine_main"
 
-local R15 = {
-    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
-    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
-    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
-    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
-    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
-}
-local R6 = {
-    {"Head","Torso"},{"Torso","Left Arm"},{"Torso","Right Arm"},
-    {"Torso","Left Leg"},{"Torso","Right Leg"},
+local Snap = {
+    registry = {},
+    matches = {},
+    disabled = {},
+    terms = {},
+    hookInstalled = false,
+    previousNamecall = nil,
+    hook = nil,
+    hookError = nil,
+    timer = 0,
+    outgoingBlocked = 0,
+    paragraph = nil,
+    results = nil,
+    selectedPath = nil,
+    lastOptions = "",
+    lastStatus = "",
+    refreshQueued = false,
 }
 
-local function mk(class, props)
-    local d = Drawing.new(class)
-    for k, v in pairs(props) do d[k] = v end
-    return d
+local function connect(signal, callback)
+    local connection = signal:Connect(callback)
+    connections[#connections + 1] = connection
+    return connection
 end
 
-local function inst(class, props, parent)
-    local i = Instance.new(class)
-    for k, v in pairs(props) do i[k] = v end
-    i.Parent = parent
-    return i
+local function instance(class, properties, parent)
+    local object = Instance.new(class)
+    for key, value in pairs(properties) do
+        object[key] = value
+    end
+    object.Parent = parent
+    return object
 end
 
-local function label(parent, text, color, size, font)
-    return inst("TextLabel", {
-        BackgroundTransparency = 1, Text = text, TextColor3 = color,
-        TextSize = size, Font = font or Enum.Font.GothamBold,
-        TextStrokeTransparency = 0.3, TextStrokeColor3 = Color3.new(0, 0, 0),
+local function draw(class, properties)
+    local object = Drawing.new(class)
+    drawings[object] = true
+    for key, value in pairs(properties) do
+        object[key] = value
+    end
+    return object
+end
+
+local function removeDrawing(object)
+    if drawings[object] then
+        drawings[object] = nil
+        pcall(function()
+            object:Remove()
+        end)
+    end
+end
+
+local function notify(title, content)
+    if alive then
+        pcall(function()
+            Rayfield:Notify({
+                Title = title,
+                Content = content,
+                Duration = 5,
+            })
+        end)
+    end
+end
+
+local function firstOption(value)
+    if type(value) == "table" then
+        return value[1]
+    end
+    return value
+end
+
+local function copy(text)
+    if not clipboard then
+        notify("Clipboard unavailable", tostring(text))
+        return false
+    end
+    local ok, err = pcall(clipboard, tostring(text))
+    if not ok then
+        notify("Clipboard error", tostring(err))
+    end
+    return ok
+end
+
+local function restoreAllProperties()
+    for object, properties in pairs(savedProperties) do
+        for property, value in pairs(properties) do
+            pcall(function()
+                object[property] = value
+            end)
+        end
+    end
+    savedProperties = {}
+
+    for object, value in pairs(changedTransparency) do
+        pcall(function()
+            object.Transparency = value
+        end)
+    end
+    changedTransparency = {}
+
+    if originalGravity ~= nil then
+        pcall(function()
+            workspace.Gravity = originalGravity
+        end)
+        originalGravity = nil
+    end
+end
+
+---------------------------------------------------------------- REMOTE SEARCH / BLOCKING
+
+local function isRemote(object)
+    return object:IsA("RemoteEvent")
+        or object:IsA("RemoteFunction")
+        or object:IsA("UnreliableRemoteEvent")
+end
+
+local function fullPath(object)
+    local ok, path = pcall(object.GetFullName, object)
+    return ok and path or object.Name
+end
+
+local function normalize(text)
+    return Config.SnapIgnoreCase and text:lower() or text
+end
+
+local function parseTerms()
+    local terms, seen = {}, {}
+
+    for term in Config.SnapRemoteNames:gmatch("[^,;\r\n]+") do
+        term = term:match("^%s*(.-)%s*$")
+        term = term:gsub("^game%.", "")
+        term = normalize(term)
+
+        if term ~= "" and not seen[term] then
+            seen[term] = true
+            terms[#terms + 1] = term
+        end
+    end
+
+    Snap.terms = terms
+end
+
+local function matchesRemote(remote)
+    if #Snap.terms == 0 then
+        return false
+    end
+
+    local name = normalize(remote.Name)
+    local path = normalize(fullPath(remote))
+
+    for _, term in ipairs(Snap.terms) do
+        if Config.SnapExactMatch then
+            if name == term or path == term then
+                return true
+            end
+        elseif name:find(term, 1, true) or path:find(term, 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function restoreRemoteListeners(remote)
+    local owned = Snap.disabled[remote]
+    if not owned then
+        return
+    end
+
+    for connection in pairs(owned) do
+        pcall(function()
+            connection:Enable()
+        end)
+    end
+
+    Snap.disabled[remote] = nil
+end
+
+local function restoreAllSnapListeners()
+    local remotes = {}
+    for remote in pairs(Snap.disabled) do
+        remotes[#remotes + 1] = remote
+    end
+    for _, remote in ipairs(remotes) do
+        restoreRemoteListeners(remote)
+    end
+end
+
+local function connectionEnabled(connection)
+    local ok, value = pcall(function()
+        return connection.Enabled
+    end)
+    if ok and type(value) == "boolean" then
+        return value
+    end
+
+    ok, value = pcall(function()
+        return connection.State
+    end)
+    if ok and type(value) == "boolean" then
+        return value
+    end
+
+    return nil
+end
+
+local function installSnapHook()
+    if Snap.hookInstalled then
+        return true
+    end
+
+    if type(hookmetamethod) ~= "function"
+        or type(getnamecallmethod) ~= "function"
+    then
+        Snap.hookError = "hookmetamethod/getnamecallmethod unavailable"
+        return false
+    end
+
+    local previous
+
+    local function interceptor(self, ...)
+        if alive and Config.BlockSnap and Config.SnapBlockOutgoing
+            and Snap.matches[self]
+        then
+            local method = getnamecallmethod()
+            if method == "FireServer" or method == "InvokeServer" then
+                Snap.outgoingBlocked += 1
+                return nil
+            end
+        end
+
+        return previous(self, ...)
+    end
+
+    local closure = newcclosure and newcclosure(interceptor) or interceptor
+    local ok, result = pcall(hookmetamethod, game, "__namecall", closure)
+
+    if not ok or type(result) ~= "function" then
+        Snap.hookError = tostring(result)
+        return false
+    end
+
+    previous = result
+    Snap.previousNamecall = result
+    Snap.hook = closure
+    Snap.hookInstalled = true
+    Snap.hookError = nil
+    return true
+end
+
+local function removeSnapHook()
+    if not Snap.hookInstalled then
+        return true
+    end
+
+    local ok, err = pcall(
+        hookmetamethod, game, "__namecall", Snap.previousNamecall
+    )
+
+    if ok then
+        Snap.hookInstalled = false
+        Snap.previousNamecall = nil
+        Snap.hook = nil
+        Snap.hookError = nil
+        return true
+    end
+
+    -- Blocking gates are disabled by callers before restoration.
+    Snap.hookError = tostring(err)
+    return false, tostring(err)
+end
+
+local function disableRemoteListeners(remote)
+    if not (
+        remote:IsA("RemoteEvent")
+        or remote:IsA("UnreliableRemoteEvent")
+    ) then
+        return 0, 0
+    end
+
+    local ok, listeners = pcall(getconnections, remote.OnClientEvent)
+    if not ok or type(listeners) ~= "table" then
+        return 0, 1
+    end
+
+    local owned = Snap.disabled[remote]
+    if not owned then
+        owned = {}
+        Snap.disabled[remote] = owned
+    end
+
+    local skipped = 0
+
+    for _, connection in pairs(listeners) do
+        if owned[connection] then
+            pcall(function()
+                connection:Disable()
+            end)
+        else
+            local enabled = connectionEnabled(connection)
+
+            if enabled == true then
+                local disabled = pcall(function()
+                    connection:Disable()
+                end)
+                if disabled then
+                    owned[connection] = true
+                else
+                    skipped += 1
+                end
+            elseif enabled == nil then
+                -- Do not modify listeners whose initial state is unknown.
+                skipped += 1
+            end
+        end
+    end
+
+    local count = 0
+    for _ in pairs(owned) do
+        count += 1
+    end
+    return count, skipped
+end
+
+local function updateSnapUI(indexedCount, paths, listenerCount, skipped)
+    if Snap.results then
+        local signature = table.concat(paths, "\n")
+        if signature ~= Snap.lastOptions then
+            Snap.lastOptions = signature
+            Snap.selectedPath = nil
+            pcall(function()
+                Snap.results:Refresh(
+                    #paths > 0 and paths or { "No matching remotes" }
+                )
+            end)
+        end
+    end
+
+    local outgoing
+    if not Config.BlockSnap or not Config.SnapBlockOutgoing then
+        outgoing = "off"
+    elseif Snap.hookInstalled then
+        outgoing = "active"
+    else
+        outgoing = "unavailable: " .. tostring(Snap.hookError)
+    end
+
+    local incoming
+    if not Config.BlockSnap or not Config.SnapBlockIncoming then
+        incoming = "off"
+    elseif type(getconnections) ~= "function" then
+        incoming = "getconnections unavailable"
+    else
+        incoming = ("%d owned listeners disabled; %d skipped/errors")
+            :format(listenerCount, skipped)
+    end
+
+    local text = (
+        "%s | Indexed remotes: %d | Matches: %d\n"
+        .. "Outgoing: %s | Dropped calls: %d\nIncoming: %s"
+    ):format(
+        Config.BlockSnap and "BLOCKING ENABLED" or "SEARCH ONLY",
+        indexedCount,
+        #paths,
+        outgoing,
+        Snap.outgoingBlocked,
+        incoming
+    )
+
+    if #Snap.terms == 0 then
+        text ..= "\nEnter at least one remote name or full path."
+    end
+
+    if text ~= Snap.lastStatus then
+        Snap.lastStatus = text
+        if alive and Snap.paragraph then
+            pcall(function()
+                Snap.paragraph:Set({
+                    Title = "Remote search status",
+                    Content = text,
+                })
+            end)
+        end
+    end
+end
+
+local function refreshSnap()
+    if not alive then
+        return
+    end
+
+    parseTerms()
+
+    local nextMatches = {}
+    local paths = {}
+    local indexedCount = 0
+
+    for remote in pairs(Snap.registry) do
+        if remote:IsDescendantOf(game) then
+            indexedCount += 1
+            if matchesRemote(remote) then
+                nextMatches[remote] = true
+                paths[#paths + 1] = fullPath(remote)
+            end
+        else
+            Snap.registry[remote] = nil
+        end
+    end
+
+    for remote in pairs(Snap.matches) do
+        if not nextMatches[remote] then
+            restoreRemoteListeners(remote)
+        end
+    end
+
+    Snap.matches = nextMatches
+    table.sort(paths)
+
+    local listenerCount, skipped = 0, 0
+
+    if Config.BlockSnap and #paths > 0 then
+        if Config.SnapBlockOutgoing then
+            installSnapHook()
+        end
+
+        if Config.SnapBlockIncoming and type(getconnections) == "function" then
+            for remote in pairs(Snap.matches) do
+                local count, misses = disableRemoteListeners(remote)
+                listenerCount += count
+                skipped += misses
+            end
+        else
+            restoreAllSnapListeners()
+        end
+    else
+        restoreAllSnapListeners()
+    end
+
+    updateSnapUI(indexedCount, paths, listenerCount, skipped)
+end
+
+local function queueSnapRefresh()
+    if Snap.refreshQueued or not alive then
+        return
+    end
+
+    Snap.refreshQueued = true
+    task.defer(function()
+        Snap.refreshQueued = false
+        if not alive then
+            return
+        end
+        local ok, err = pcall(refreshSnap)
+        if not ok then
+            warn("[haxbey engine] Remote search error: " .. tostring(err))
+            notify("Remote search error", tostring(err))
+        end
+    end)
+end
+
+local function scanAllRemotes()
+    local registry = {}
+    for _, object in ipairs(game:GetDescendants()) do
+        if isRemote(object) then
+            registry[object] = true
+        end
+    end
+    Snap.registry = registry
+    queueSnapRefresh()
+end
+
+local function setBlockSnap(value)
+    Config.BlockSnap = value == true
+    Snap.timer = 0
+
+    if not Config.BlockSnap then
+        restoreAllSnapListeners()
+        local ok, err = removeSnapHook()
+        if not ok then
+            notify(
+                "Hook cleanup",
+                "Blocking is off; hook remains pass-through: " .. tostring(err)
+            )
+        end
+    end
+
+    queueSnapRefresh()
+end
+
+---------------------------------------------------------------- CLEANUP
+
+local unload
+unload = function()
+    if not alive then
+        return
+    end
+
+    Config.BlockSnap = false
+    Snap.matches = {}
+    alive = false
+
+    restoreAllSnapListeners()
+    local hookRemoved, hookError = removeSnapHook()
+    if not hookRemoved then
+        warn("[haxbey engine] Hook is pass-through; restoration failed: "
+            .. tostring(hookError))
+    end
+
+    for _, state in ipairs(browserStates) do
+        state.token += 1
+    end
+
+    RunService:UnbindFromRenderStep(renderName)
+
+    for _, connection in ipairs(connections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    table.clear(connections)
+
+    restoreAllProperties()
+
+    local remaining = {}
+    for object in pairs(drawings) do
+        remaining[#remaining + 1] = object
+    end
+    for _, object in ipairs(remaining) do
+        removeDrawing(object)
+    end
+
+    table.clear(tracked)
+    table.clear(Snap.registry)
+
+    if overlay then
+        pcall(function()
+            overlay:Destroy()
+        end)
+    end
+    pcall(function()
+        Rayfield:Destroy()
+    end)
+
+    if env.HaxbeyEngineUnload == unload then
+        env.HaxbeyEngineUnload = nil
+    end
+end
+
+env.HaxbeyEngineUnload = unload
+
+---------------------------------------------------------------- WINDOW
+
+local title = Config.MenuTitle
+if Config.TitleIcon ~= "" then
+    title ..= " " .. Config.TitleIcon
+end
+
+local Window = Rayfield:CreateWindow({
+    Name = title,
+    LoadingTitle = "haxbey engine",
+    LoadingSubtitle = "by ByHAXBEY (Furkan)",
+    Theme = RedTheme,
+    ToggleUIKeybind = Config.MenuKey,
+    DisableRayfieldPrompts = true,
+    DisableBuildWarnings = true,
+    ConfigurationSaving = { Enabled = false },
+    Discord = {
+        Enabled = false,
+        Invite = "",
+        RememberJoins = false,
+    },
+    KeySystem = false,
+})
+
+local Tabs = {
+    ESP = Window:CreateTab("ESP", 4483362458),
+    Char = Window:CreateTab("Character", 4483362458),
+    Aim = Window:CreateTab("Aim", 4483362458),
+    Catalog = Window:CreateTab("Catalog", 4483362458),
+    Store = Window:CreateTab("Store", 4483362458),
+    Settings = Window:CreateTab("Config", 4483362458),
+}
+
+local function toggle(tab, name, key, callback)
+    local control = tab:CreateToggle({
+        Name = name,
+        CurrentValue = Config[key],
+        Flag = "HX_" .. key,
+        Callback = function(value)
+            Config[key] = value
+            if callback then
+                callback(value)
+            end
+        end,
+    })
+    toggles[key] = control
+    return control
+end
+
+local function slider(tab, name, key, minimum, maximum, increment, suffix)
+    return tab:CreateSlider({
+        Name = name,
+        Range = { minimum, maximum },
+        Increment = increment,
+        Suffix = suffix or "",
+        CurrentValue = Config[key],
+        Flag = "HX_" .. key,
+        Callback = function(value)
+            Config[key] = value
+        end,
+    })
+end
+
+---------------------------------------------------------------- OVERLAY
+
+local overlayParent = CoreGui
+if gethui then
+    local ok, result = pcall(gethui)
+    if ok and result then
+        overlayParent = result
+    end
+end
+
+overlay = instance("ScreenGui", {
+    Name = "HaxbeyEngineOverlay",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+    DisplayOrder = 998,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, overlayParent)
+
+local function textLabel(parent, text, color, size)
+    return instance("TextLabel", {
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Text = text,
+        TextColor3 = color,
+        TextSize = size,
+        Font = Enum.Font.GothamBold,
+        TextStrokeTransparency = 0.3,
+        TextStrokeColor3 = Color3.new(),
     }, parent)
 end
 
----------------------------------------------------------------- gui root
-local gui = inst("ScreenGui", {
-    Name = "ESP_UI", ResetOnSpawn = false, IgnoreGuiInset = true,
-    DisplayOrder = 999, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-}, (gethui and gethui()) or game:GetService("CoreGui"))
+local hud = instance("Frame", {
+    AnchorPoint = Vector2.new(0.5, 0),
+    Position = UDim2.fromScale(0.5, Config.HudY),
+    Size = UDim2.fromOffset(0, 0),
+    AutomaticSize = Enum.AutomaticSize.XY,
+    BackgroundTransparency = 1,
+}, overlay)
 
----------------------------------------------------------------- fov circle
-local fovCircle = mk("Circle", {
+instance("UIListLayout", {
+    FillDirection = Enum.FillDirection.Horizontal,
+    Padding = UDim.new(0, 8),
+    VerticalAlignment = Enum.VerticalAlignment.Center,
+}, hud)
+
+local function pill(order)
+    local frame = instance("Frame", {
+        LayoutOrder = order,
+        Size = UDim2.fromOffset(0, 0),
+        AutomaticSize = Enum.AutomaticSize.XY,
+        BackgroundColor3 = Color3.fromRGB(35, 20, 23),
+        BackgroundTransparency = 0.15,
+        BorderSizePixel = 0,
+        Visible = false,
+    }, hud)
+    instance("UICorner", { CornerRadius = UDim.new(0, 8) }, frame)
+    instance("UIStroke", {
+        Color = Color3.fromRGB(185, 40, 45),
+        Thickness = 1.5,
+    }, frame)
+    instance("UIPadding", {
+        PaddingLeft = UDim.new(0, 12),
+        PaddingRight = UDim.new(0, 12),
+        PaddingTop = UDim.new(0, 6),
+        PaddingBottom = UDim.new(0, 6),
+    }, frame)
+    local text = textLabel(frame, "", Color3.new(1, 1, 1), Config.HudTextSize)
+    text.AutomaticSize = Enum.AutomaticSize.XY
+    text.Size = UDim2.fromOffset(0, 0)
+    text.TextStrokeTransparency = 1
+    return frame, text
+end
+
+local countPill, countText = pill(1)
+local fpsPill, fpsText = pill(2)
+
+local warning = textLabel(
+    overlay, Config.WarnText, Config.WarnColorA, Config.WarnTextSize
+)
+warning.AnchorPoint = Vector2.new(0.5, 0)
+warning.Position = UDim2.fromScale(0.5, Config.WarnY)
+warning.Size = UDim2.fromOffset(0, 0)
+warning.AutomaticSize = Enum.AutomaticSize.XY
+warning.Visible = false
+
+local openHeight = math.floor(Config.OpenWidth * 122 / 596 + 0.5)
+local openButton = instance("ImageButton", {
+    Position = UDim2.new(0, 8, 0.5, -openHeight / 2),
+    Size = UDim2.fromOffset(Config.OpenWidth, openHeight),
+    BackgroundColor3 = Color3.fromRGB(110, 25, 30),
+    BackgroundTransparency = 0.15,
+    Image = Config.OpenImage,
+    ScaleType = Enum.ScaleType.Fit,
+    AutoButtonColor = true,
+}, overlay)
+local openText = textLabel(openButton, "HAXBEY", Color3.new(1, 1, 1), 11)
+openText.Size = UDim2.fromScale(1, 1)
+
+connect(openButton.Activated, function()
+    if Rayfield.SetVisibility and Rayfield.IsVisible then
+        pcall(function()
+            Rayfield:SetVisibility(not Rayfield:IsVisible())
+        end)
+    else
+        notify("Menu", "Use Rayfield's mobile reopen control.")
+    end
+end)
+
+---------------------------------------------------------------- ESP UI
+
+Tabs.ESP:CreateSection("Master controls")
+
+local espKeys = {
+    "Enabled", "Box", "Health", "Name", "Item", "Dist",
+    "Bones", "RootDot", "Warn", "Counter", "Fps",
+}
+
+local function setAll(value)
+    for _, key in ipairs(espKeys) do
+        Config[key] = value
+        if toggles[key] then
+            toggles[key]:Set(value)
+        end
+    end
+end
+
+Tabs.ESP:CreateButton({
+    Name = "ESP ALL ON",
+    Callback = function()
+        setAll(true)
+    end,
+})
+Tabs.ESP:CreateButton({
+    Name = "ESP ALL OFF",
+    Callback = function()
+        setAll(false)
+    end,
+})
+
+for _, entry in ipairs({
+    { "ESP master", "Enabled" },
+    { "Team check", "TeamCheck" },
+    { "Corner boxes", "Box" },
+    { "Health bars", "Health" },
+    { "Player names", "Name" },
+    { "Held item", "Item" },
+    { "Distance", "Dist" },
+    { "Skeleton", "Bones" },
+    { "Root dot", "RootDot" },
+    { "Aim warning", "Warn" },
+    { "Enemy counter", "Counter" },
+    { "FPS", "Fps" },
+}) do
+    toggle(Tabs.ESP, entry[1], entry[2])
+end
+
+---------------------------------------------------------------- CHARACTER / REMOTE UI
+
+Tabs.Char:CreateSection("Movement")
+toggle(Tabs.Char, "Enable walk speed", "SpeedOn")
+slider(Tabs.Char, "Walk speed", "Speed", 16, 150, 1, "studs/s")
+
+Tabs.Char:CreateSection("Remote search")
+
+Tabs.Char:CreateInput({
+    Name = "Remote names or full paths",
+    CurrentValue = Config.SnapRemoteNames,
+    PlaceholderText = "onPunishment, AnotherRemote",
+    RemoveTextAfterFocusLost = false,
+    Flag = "HX_SnapRemoteNames",
+    Callback = function(value)
+        Config.SnapRemoteNames = tostring(value)
+        queueSnapRefresh()
+    end,
+})
+
+toggle(Tabs.Char, "Exact name / full-path matching", "SnapExactMatch", queueSnapRefresh)
+toggle(Tabs.Char, "Ignore uppercase / lowercase", "SnapIgnoreCase", queueSnapRefresh)
+
+Snap.paragraph = Tabs.Char:CreateParagraph({
+    Title = "Remote search status",
+    Content = "Enter remote names, then press Scan all client-visible remotes.",
+})
+
+Snap.results = Tabs.Char:CreateDropdown({
+    Name = "Matching remote paths",
+    Options = { "No matching remotes" },
+    CurrentOption = { "No matching remotes" },
+    MultipleOptions = false,
+    Flag = "HX_SnapRemoteResults",
+    Callback = function(value)
+        local path = firstOption(value)
+        if path and path ~= "No matching remotes" then
+            Snap.selectedPath = path
+        end
+    end,
+})
+
+Tabs.Char:CreateButton({
+    Name = "Scan all client-visible remotes",
+    Callback = scanAllRemotes,
+})
+
+Tabs.Char:CreateButton({
+    Name = "Copy selected remote path",
+    Callback = function()
+        if Snap.selectedPath then
+            copy(Snap.selectedPath)
+        else
+            notify("No selection", "Select a matching remote path first.")
+        end
+    end,
+})
+
+Tabs.Char:CreateButton({
+    Name = "Copy all matching remote paths",
+    Callback = function()
+        local paths = {}
+        for remote in pairs(Snap.matches) do
+            paths[#paths + 1] = fullPath(remote)
+        end
+        table.sort(paths)
+        if #paths > 0 then
+            copy(table.concat(paths, "\n"))
+        else
+            notify("No matches", "Search for a remote name first.")
+        end
+    end,
+})
+
+toggle(Tabs.Char, "Block outgoing remote calls", "SnapBlockOutgoing", function(value)
+    if not value then
+        removeSnapHook()
+    end
+    queueSnapRefresh()
+end)
+
+toggle(Tabs.Char, "Disable incoming event listeners", "SnapBlockIncoming", function(value)
+    if not value then
+        restoreAllSnapListeners()
+    end
+    queueSnapRefresh()
+end)
+
+toggle(Tabs.Char, "BlockSnap master", "BlockSnap", setBlockSnap)
+
+Tabs.Char:CreateParagraph({
+    Title = "Search and blocking behavior",
+    Content = "Names may be separated by commas, semicolons, or newlines. "
+        .. "All matching remotes are targeted. Turn exact matching off "
+        .. "for substring searches. Full paths narrow duplicate names. "
+        .. "New remotes are indexed automatically. Searches cover only "
+        .. "instances available to this client, not server-only files.",
+})
+
+Tabs.Char:CreateSection("Jump / gravity")
+toggle(Tabs.Char, "Enable jump power", "JumpOn")
+slider(Tabs.Char, "Jump power", "Jump", 50, 250, 1)
+toggle(Tabs.Char, "Enable gravity", "GravOn")
+slider(Tabs.Char, "Gravity", "Grav", 20, 196, 1)
+
+Tabs.Char:CreateSection("Appearance")
+toggle(Tabs.Char, "Enable head size", "HeadOn")
+slider(Tabs.Char, "Head size", "Head", 1, 5, 0.1, "x")
+toggle(Tabs.Char, "Enable transparency", "TransOn")
+slider(Tabs.Char, "Transparency", "Trans", 0, 1, 0.05)
+
+---------------------------------------------------------------- AIM UI
+
+Tabs.Aim:CreateSection("Targeting")
+toggle(Tabs.Aim, "Aimbot", "AimEnabled")
+toggle(Tabs.Aim, "Show FOV circle", "ShowFov")
+toggle(Tabs.Aim, "Camera lock", "CamLock")
+toggle(Tabs.Aim, "Character lock", "CharLock")
+toggle(Tabs.Aim, "Teleport to target", "SilentAim")
+toggle(Tabs.Aim, "Visibility check", "VisCheck")
+toggle(Tabs.Aim, "Prediction", "PredictionOn")
+slider(Tabs.Aim, "Prediction", "PredictionVal", 0, 0.5, 0.01, "seconds")
+slider(Tabs.Aim, "FOV radius", "AimFov", 10, 1000, 10, "px")
+slider(Tabs.Aim, "Maximum distance", "AimDist", 50, 1000, 50, "studs")
+slider(Tabs.Aim, "Smoothness", "AimSmooth", 1, 20, 1)
+
+---------------------------------------------------------------- HTTP
+
+local httpBusy = false
+local nextRequestAt = 0
+local responseCache = {}
+
+local function current(state, token)
+    return alive and state.token == token
+end
+
+local function setStatus(state, content)
+    if alive and state.status then
+        pcall(function()
+            state.status:Set({ Title = "Status", Content = content })
+        end)
+    end
+end
+
+local function getJson(url, state, token)
+    if not current(state, token) then
+        return nil, "cancelled"
+    end
+    if not httpRequest then
+        return nil, "request() unavailable"
+    end
+
+    local cached = responseCache[url]
+    if cached and os.clock() - cached.time < 30 then
+        return cached.data, "200 (cached)"
+    end
+
+    for attempt = 1, Config.HttpRetries do
+        while alive and (httpBusy or os.clock() < nextRequestAt) do
+            if not current(state, token) then
+                return nil, "cancelled"
+            end
+            task.wait(0.1)
+        end
+
+        if not current(state, token) then
+            return nil, "cancelled"
+        end
+
+        httpBusy = true
+        local ok, response = pcall(httpRequest, {
+            Url = url,
+            Method = "GET",
+            Headers = { Accept = "application/json" },
+        })
+        nextRequestAt = math.max(nextRequestAt, os.clock() + Config.HttpGap)
+        httpBusy = false
+
+        if not current(state, token) then
+            return nil, "cancelled"
+        end
+        if not ok or type(response) ~= "table" then
+            return nil, "request failed"
+        end
+
+        local code = tonumber(response.StatusCode or response.Status)
+        if code == 429 then
+            local retryAfter
+            for name, value in pairs(response.Headers or {}) do
+                if tostring(name):lower() == "retry-after" then
+                    retryAfter = tonumber(value)
+                    break
+                end
+            end
+            local delay = math.max(retryAfter or (5 * 2 ^ (attempt - 1)), 2)
+            nextRequestAt = math.max(nextRequestAt, os.clock() + delay)
+            setStatus(state, ("HTTP 429; waiting %.0fs."):format(delay))
+            if attempt == Config.HttpRetries then
+                return nil, "429"
+            end
+        elseif code ~= 200 then
+            return nil, tostring(code or "unknown HTTP status")
+        else
+            local decoded, data = pcall(
+                HttpService.JSONDecode, HttpService, response.Body or ""
+            )
+            if not decoded or type(data) ~= "table" then
+                return nil, "invalid JSON"
+            end
+            responseCache[url] = { time = os.clock(), data = data }
+            return data, "200"
+        end
+    end
+
+    return nil, "429"
+end
+
+---------------------------------------------------------------- CATALOG / STORE
+
+local catalogCategories = {
+    { name = "All" },
+    { name = "Accessories", category = "Accessories" },
+    { name = "Hats", category = "Accessories", subcategory = "HatAccessories" },
+    { name = "Hair", category = "Accessories", subcategory = "HairAccessories" },
+    { name = "Face", category = "Accessories", subcategory = "FaceAccessories" },
+    { name = "Neck", category = "Accessories", subcategory = "NeckAccessories" },
+    { name = "Shoulder", category = "Accessories", subcategory = "ShoulderAccessories" },
+    { name = "Front", category = "Accessories", subcategory = "FrontAccessories" },
+    { name = "Back", category = "Accessories", subcategory = "BackAccessories" },
+    { name = "Waist", category = "Accessories", subcategory = "WaistAccessories" },
+    { name = "Classic Shirts", category = "Clothing", subcategory = "ClassicShirts" },
+    { name = "Classic T-Shirts", category = "Clothing", subcategory = "ClassicTShirts" },
+    { name = "Classic Pants", category = "Clothing", subcategory = "ClassicPants" },
+    { name = "Gear", category = "Gear" },
+}
+
+local storeModes = {
+    { name = "Models", category = "Model", toolbox = 10 },
+    { name = "Decals", category = "Decal", toolbox = 13 },
+    { name = "Audio", category = "Audio", toolbox = 3 },
+    { name = "Plugins", category = "Plugin", toolbox = 38 },
+}
+
+local sortIds = {
+    ["Best selling"] = 2,
+    ["Newest"] = 3,
+    ["Price ascending"] = 4,
+    ["Price descending"] = 5,
+}
+
+local function names(entries)
+    local result = {}
+    for _, entry in ipairs(entries) do
+        result[#result + 1] = entry.name
+    end
+    return result
+end
+
+local function findNamed(entries, name)
+    for _, entry in ipairs(entries) do
+        if entry.name == name then
+            return entry
+        end
+    end
+    return entries[1]
+end
+
+local function priceText(price, status)
+    if price == nil then
+        return status or "Off sale"
+    elseif price == 0 then
+        return "Free"
+    end
+    return Config.RobuxIcon .. " " .. tostring(price)
+end
+
+local function makeBrowser(tab, isCatalog)
+    local state = {
+        token = 0, page = 1, cursors = {}, query = "",
+        category = isCatalog and "All" or "Models",
+        price = "Any", sort = "Relevance",
+        selected = nil, nextCursor = nil,
+        hasNext = false, lookup = {}, loading = false,
+    }
+    browserStates[#browserStates + 1] = state
+
+    tab:CreateSection(isCatalog and "Avatar catalog" or "Creator Store")
+
+    local function invalidate()
+        state.token += 1
+        state.loading = false
+        state.page = 1
+        state.cursors = {}
+        state.hasNext = false
+        state.nextCursor = nil
+        state.selected = nil
+        state.lookup = {}
+        if state.results then
+            state.results:Refresh({ "Press Search" })
+        end
+        setStatus(state, "Search settings changed. Press Search.")
+    end
+
+    tab:CreateInput({
+        Name = "Search text",
+        CurrentValue = "",
+        PlaceholderText = "Enter a search term",
+        RemoveTextAfterFocusLost = false,
+        Flag = isCatalog and "HX_CatalogQuery" or "HX_StoreQuery",
+        Callback = function(value)
+            local query = tostring(value)
+            if query ~= state.query then
+                state.query = query
+                invalidate()
+            end
+        end,
+    })
+
+    tab:CreateDropdown({
+        Name = isCatalog and "Category" or "Asset type",
+        Options = names(isCatalog and catalogCategories or storeModes),
+        CurrentOption = { state.category },
+        MultipleOptions = false,
+        Flag = isCatalog and "HX_CatalogCategory" or "HX_StoreCategory",
+        Callback = function(value)
+            local category = firstOption(value)
+            if category and category ~= state.category then
+                state.category = category
+                invalidate()
+            end
+        end,
+    })
+
+    if isCatalog then
+        tab:CreateDropdown({
+            Name = "Price",
+            Options = { "Any", "Free", "Paid" },
+            CurrentOption = { "Any" },
+            MultipleOptions = false,
+            Flag = "HX_CatalogPrice",
+            Callback = function(value)
+                local price = firstOption(value) or "Any"
+                if price ~= state.price then
+                    state.price = price
+                    invalidate()
+                end
+            end,
+        })
+
+        tab:CreateDropdown({
+            Name = "Sort",
+            Options = {
+                "Relevance", "Best selling", "Newest",
+                "Price ascending", "Price descending",
+            },
+            CurrentOption = { "Relevance" },
+            MultipleOptions = false,
+            Flag = "HX_CatalogSort",
+            Callback = function(value)
+                local sort = firstOption(value) or "Relevance"
+                if sort ~= state.sort then
+                    state.sort = sort
+                    invalidate()
+                end
+            end,
+        })
+    end
+
+    state.status = tab:CreateParagraph({
+        Title = "Status",
+        Content = "Ready. Searches are manual; requests share one queue.",
+    })
+
+    state.results = tab:CreateDropdown({
+        Name = "Results",
+        Options = { "No results loaded" },
+        CurrentOption = { "No results loaded" },
+        MultipleOptions = false,
+        Flag = isCatalog and "HX_CatalogResults" or "HX_StoreResults",
+        Callback = function(value)
+            local item = state.lookup[firstOption(value)]
+            if not item then
+                return
+            end
+            state.selected = item
+            local copied = copy(item.id)
+            setStatus(state, ("Selected %s [%s]. %s"):format(
+                item.name, tostring(item.id),
+                copied and "ID copied." or "ID not copied."
+            ))
+        end,
+    })
+
+    local function searchPage(reset)
+        if state.loading or not alive then
+            return
+        end
+        if reset then
+            state.page = 1
+            state.cursors = {}
+        end
+
+        state.token += 1
+        local token, page = state.token, state.page
+        local query = state.query:match("^%s*(.-)%s*$")
+        local category, price, sort = state.category, state.price, state.sort
+        local cursor = state.cursors[page]
+
+        state.loading = true
+        state.selected = nil
+        state.hasNext = false
+        state.nextCursor = nil
+        state.lookup = {}
+        state.results:Refresh({ "Loading..." })
+        setStatus(state, "Loading page " .. page .. "...")
+
+        task.spawn(function()
+            local ok, err = pcall(function()
+                local items = {}
+                local nextCursor, code, data
+                local hasNext = false
+
+                if isCatalog then
+                    local filter = findNamed(catalogCategories, category)
+                    local url = "https://catalog.roblox.com/v1/search/items/details"
+                        .. "?Limit=30&SalesTypeFilter=1"
+                        .. "&Keyword=" .. HttpService:UrlEncode(query)
+
+                    if filter.category then
+                        url ..= "&Category=" .. HttpService:UrlEncode(filter.category)
+                    end
+                    if filter.subcategory then
+                        url ..= "&Subcategory=" .. HttpService:UrlEncode(filter.subcategory)
+                    end
+                    if sortIds[sort] then
+                        url ..= "&SortType=" .. sortIds[sort]
+                    end
+                    if price == "Free" then
+                        url ..= "&MaxPrice=0"
+                    elseif price == "Paid" then
+                        url ..= "&MinPrice=1"
+                    end
+                    if cursor then
+                        url ..= "&Cursor=" .. HttpService:UrlEncode(cursor)
+                    end
+
+                    data, code = getJson(url, state, token)
+                    if data then
+                        for _, entry in ipairs(data.data or {}) do
+                            if tonumber(entry.id) then
+                                local amount = entry.price
+                                if amount == nil then
+                                    amount = entry.lowestPrice
+                                end
+                                items[#items + 1] = {
+                                    id = tonumber(entry.id),
+                                    name = entry.name or ("Asset " .. entry.id),
+                                    itemType = entry.itemType or "Asset",
+                                    price = priceText(amount, entry.priceStatus),
+                                }
+                            end
+                        end
+                        nextCursor = data.nextPageCursor
+                        hasNext = type(nextCursor) == "string" and nextCursor ~= ""
+                    end
+                else
+                    local mode = findNamed(storeModes, category)
+                    local url = (
+                        "https://apis.roblox.com/toolbox-service/v2/assets:search"
+                        .. "?searchCategoryType=%s&query=%s&maxPageSize=30"
+                    ):format(mode.category, HttpService:UrlEncode(query))
+
+                    if cursor then
+                        url ..= "&pageToken=" .. HttpService:UrlEncode(cursor)
+                    end
+
+                    data, code = getJson(url, state, token)
+
+                    if not data and (code == "400" or code == "404") then
+                        url = (
+                            "https://apis.roblox.com/toolbox-service/v1/marketplace/%d"
+                            .. "?keyword=%s&limit=30&pageNumber=%d&sortType=Relevance"
+                        ):format(mode.toolbox, HttpService:UrlEncode(query), page - 1)
+
+                        data, code = getJson(url, state, token)
+                        if data then
+                            for _, entry in ipairs(data.data or {}) do
+                                local asset = entry.asset or entry
+                                if tonumber(asset.id) then
+                                    items[#items + 1] = {
+                                        id = tonumber(asset.id),
+                                        name = asset.name or ("Asset " .. asset.id),
+                                        itemType = "Asset",
+                                        price = "",
+                                    }
+                                end
+                            end
+                            hasNext = #items >= 30
+                        end
+                    elseif data then
+                        for _, entry in ipairs(data.creatorStoreAssets or {}) do
+                            local asset = entry.asset
+                            if asset and tonumber(asset.id) then
+                                items[#items + 1] = {
+                                    id = tonumber(asset.id),
+                                    name = asset.name or ("Asset " .. asset.id),
+                                    itemType = "Asset",
+                                    price = "",
+                                }
+                            end
+                        end
+                        nextCursor = data.nextPageToken
+                        hasNext = type(nextCursor) == "string" and nextCursor ~= ""
+                    end
+                end
+
+                if not current(state, token) then
+                    return
+                end
+                state.loading = false
+                state.nextCursor = nextCursor
+                state.hasNext = hasNext
+
+                local options = {}
+                for index, item in ipairs(items) do
+                    local option = ("%02d | %s | %s | ID %s"):format(
+                        index, item.name, item.price, tostring(item.id)
+                    )
+                    options[#options + 1] = option
+                    state.lookup[option] = item
+                end
+
+                if #options == 0 then
+                    state.results:Refresh({ "No results" })
+                    setStatus(state, ("Page %d: no results; HTTP %s."):format(
+                        page, tostring(code)
+                    ))
+                else
+                    state.results:Refresh(options)
+                    setStatus(state, ("Page %d: %d results. Select one to copy its ID.")
+                        :format(page, #options))
+                end
+            end)
+
+            if not ok and current(state, token) then
+                state.loading = false
+                setStatus(state, "Search error: " .. tostring(err))
+                warn("[haxbey engine] Search error: " .. tostring(err))
+            end
+        end)
+    end
+
+    tab:CreateButton({
+        Name = "Search",
+        Callback = function()
+            searchPage(true)
+        end,
+    })
+    tab:CreateButton({
+        Name = "Previous page",
+        Callback = function()
+            if not state.loading and state.page > 1 then
+                state.page -= 1
+                searchPage(false)
+            end
+        end,
+    })
+    tab:CreateButton({
+        Name = "Next page",
+        Callback = function()
+            if state.loading or not state.hasNext then
+                return
+            end
+            state.cursors[state.page + 1] = state.nextCursor
+            state.page += 1
+            searchPage(false)
+        end,
+    })
+    tab:CreateButton({
+        Name = "Copy selected ID",
+        Callback = function()
+            if state.selected then
+                copy(state.selected.id)
+            else
+                notify("No selection", "Select a search result first.")
+            end
+        end,
+    })
+    tab:CreateButton({
+        Name = "Get / Buy selected",
+        Callback = function()
+            local selected = state.selected
+            if not selected then
+                notify("No selection", "Select a search result first.")
+                return
+            end
+            local ok, err = pcall(function()
+                if selected.itemType == "Bundle" then
+                    MarketplaceService:PromptBundlePurchase(lp, selected.id)
+                else
+                    MarketplaceService:PromptPurchase(lp, selected.id)
+                end
+            end)
+            if not ok then
+                notify("Purchase prompt unavailable", tostring(err))
+            end
+        end,
+    })
+end
+
+makeBrowser(Tabs.Catalog, true)
+makeBrowser(Tabs.Store, false)
+
+---------------------------------------------------------------- SETTINGS
+
+Tabs.Settings:CreateSection("Overlay settings")
+slider(Tabs.Settings, "ESP range", "MaxDistance", 100, 5000, 50, "studs")
+slider(Tabs.Settings, "Counter radius", "CountRadius", 50, 2000, 50, "studs")
+
+local kickDeadline = 0
+Tabs.Settings:CreateButton({
+    Name = "Kick myself (press twice within 3 seconds)",
+    Callback = function()
+        if os.clock() <= kickDeadline then
+            lp:Kick(Config.KickMessage)
+        else
+            kickDeadline = os.clock() + 3
+            notify("Confirm kick", "Press the same button again within 3 seconds.")
+        end
+    end,
+})
+Tabs.Settings:CreateButton({
+    Name = "Unload haxbey engine",
+    Callback = unload,
+})
+Tabs.Settings:CreateParagraph({
+    Title = "Controls",
+    Content = "RightShift: menu. End: unload. "
+        .. "Everything starts disabled. Not run or tested.",
+})
+
+---------------------------------------------------------------- ESP OBJECTS
+
+local R15 = {
+    { "Head", "UpperTorso" },
+    { "UpperTorso", "LowerTorso" },
+    { "UpperTorso", "LeftUpperArm" },
+    { "LeftUpperArm", "LeftLowerArm" },
+    { "LeftLowerArm", "LeftHand" },
+    { "UpperTorso", "RightUpperArm" },
+    { "RightUpperArm", "RightLowerArm" },
+    { "RightLowerArm", "RightHand" },
+    { "LowerTorso", "LeftUpperLeg" },
+    { "LeftUpperLeg", "LeftLowerLeg" },
+    { "LeftLowerLeg", "LeftFoot" },
+    { "LowerTorso", "RightUpperLeg" },
+    { "RightUpperLeg", "RightLowerLeg" },
+    { "RightLowerLeg", "RightFoot" },
+}
+local R6 = {
+    { "Head", "Torso" },
+    { "Torso", "Left Arm" },
+    { "Torso", "Right Arm" },
+    { "Torso", "Left Leg" },
+    { "Torso", "Right Leg" },
+}
+
+local fovCircle = draw("Circle", {
     Radius = Config.AimFov,
     Filled = false,
     Thickness = 1.5,
-    Color = Color3.fromRGB(255, 255, 255),
+    Color = Color3.new(1, 1, 1),
     Visible = false,
     NumSides = 64,
 })
 
----------------------------------------------------------------- hud
-local hud = inst("Frame", {
-    AnchorPoint = Vector2.new(0.5, 0),
-    Position = UDim2.new(0.5, 0, Config.HudY, 0),
-    AutomaticSize = Enum.AutomaticSize.XY,
-    BackgroundTransparency = 1,
-}, gui)
-inst("UIListLayout", {
-    FillDirection = Enum.FillDirection.Horizontal,
-    HorizontalAlignment = Enum.HorizontalAlignment.Center,
-    VerticalAlignment = Enum.VerticalAlignment.Center,
-    Padding = UDim.new(0, 8),
-}, hud)
-
-local function pill(order)
-    local f = inst("Frame", {
-        LayoutOrder = order, AutomaticSize = Enum.AutomaticSize.XY,
-        BackgroundColor3 = Config.HudBg, BackgroundTransparency = 0.2, Visible = false,
-    }, hud)
-    inst("UICorner", { CornerRadius = UDim.new(0, 8) }, f)
-    inst("UIStroke", { Color = Config.HudBorder, Thickness = 2 }, f)
-    inst("UIPadding", {
-        PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14),
-        PaddingTop = UDim.new(0, 7), PaddingBottom = UDim.new(0, 7),
-    }, f)
-    local t = label(f, "", Color3.new(1, 1, 1), Config.HudTextSize, Enum.Font.GothamMedium)
-    t.TextStrokeTransparency = 1
-    t.AutomaticSize = Enum.AutomaticSize.XY
-    return f, t
-end
-
-local countPill, countText = pill(1)
-local fpsPill,   fpsText   = pill(2)
-countText.Text, fpsText.Text = "Total enemy around you: 0", "60 FPS"
-
-local warnLabel = label(gui, Config.WarnText, Config.WarnColorA, Config.WarnTextSize, Enum.Font.GothamBlack)
-warnLabel.AnchorPoint = Vector2.new(0.5, 0)
-warnLabel.Position = UDim2.new(0.5, 0, Config.WarnY, 0)
-warnLabel.AutomaticSize = Enum.AutomaticSize.XY
-warnLabel.TextStrokeTransparency = 0
-warnLabel.Visible = false
-
----------------------------------------------------------------- menu
-local conns = {}
-local BG     = Color3.fromRGB(12, 12, 14)
-local PANEL  = Color3.fromRGB(18, 18, 21)
-local ROW    = Color3.fromRGB(38, 38, 42)
-local RED    = Color3.fromRGB(190, 45, 45)
-local DARKRED= Color3.fromRGB(135, 35, 35)
-local DIM    = Color3.fromRGB(70, 70, 78)
-local WHITE  = Color3.new(1, 1, 1)
-
-local WIN_W, WIN_H = 620, 420
-
-local window = inst("Frame", {
-    AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(WIN_W, WIN_H), BackgroundColor3 = BG,
-    BackgroundTransparency = 0.05, Visible = false, ClipsDescendants = true,
-}, gui)
-inst("UICorner", { CornerRadius = UDim.new(0, 8) }, window)
-inst("UIStroke", { Color = DIM, Thickness = 1.5 }, window)
-
--- title bar
-local title = inst("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = DARKRED }, window)
-inst("UICorner", { CornerRadius = UDim.new(0, 8) }, title)
-inst("Frame", {
-    AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0),
-    Size = UDim2.new(1, 0, 0, 8), BackgroundColor3 = DARKRED, BorderSizePixel = 0,
-}, title)
-local titleText = Config.MenuTitle
-if Config.TitleIcon ~= "" then titleText = titleText .. " " .. Config.TitleIcon end
-local tl = label(title, titleText, WHITE, 14, Enum.Font.GothamMedium)
-tl.Size = UDim2.new(1, 0, 1, 0) tl.TextStrokeTransparency = 1
-
-local collapseBtn = inst("TextButton", {
-    Size = UDim2.fromOffset(28, 26), Position = UDim2.fromOffset(6, 2), BackgroundTransparency = 1,
-    Text = "▼", TextColor3 = WHITE, Font = Enum.Font.GothamBold, TextSize = 14,
-}, title)
-local closeBtn = inst("TextButton", {
-    Size = UDim2.fromOffset(26, 26), AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, -6, 0, 2), BackgroundTransparency = 1,
-    Text = "✕", TextColor3 = WHITE, Font = Enum.Font.GothamBold, TextSize = 14,
-}, title)
-closeBtn.Activated:Connect(function() window.Visible = false end)
-
--- tab bar
-local tabBar = inst("Frame", {
-    Position = UDim2.fromOffset(8, 36), Size = UDim2.new(1, -16, 0, 28), BackgroundTransparency = 1,
-}, window)
-inst("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4) }, tabBar)
-
--- bordered content panel
-local panel = inst("Frame", {
-    Position = UDim2.fromOffset(8, 70), Size = UDim2.new(1, -16, 1, -78), BackgroundColor3 = PANEL,
-}, window)
-inst("UICorner", { CornerRadius = UDim.new(0, 4) }, panel)
-inst("UIStroke", { Color = DIM, Thickness = 1 }, panel)
-
-local pages, tabBtns, currentTab, collapsed = {}, {}, nil, false
-local function selectTab(name)
-    currentTab = name
-    for n, p in pairs(pages) do p.Visible = (n == name) and not collapsed end
-    for n, b in pairs(tabBtns) do b.BackgroundColor3 = (n == name) and RED or ROW end
-end
-
-collapseBtn.Activated:Connect(function()
-    collapsed = not collapsed
-    collapseBtn.Text = collapsed and "▶" or "▼"
-    tabBar.Visible, panel.Visible = not collapsed, not collapsed
-    window.Size = UDim2.fromOffset(WIN_W, collapsed and 30 or WIN_H)
-    selectTab(currentTab)
-end)
-
-local totalTabs = 6
-local function addTab(name, scroll)
-    local b = inst("TextButton", {
-        Size = UDim2.new(1 / totalTabs, -4, 1, 0), BackgroundColor3 = ROW, Text = name,
-        TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 11, AutoButtonColor = false,
-    }, tabBar)
-    inst("UICorner", { CornerRadius = UDim.new(0, 5) }, b)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, b)
-    local p = inst(scroll and "ScrollingFrame" or "Frame", {
-        Position = UDim2.fromOffset(8, 8), Size = UDim2.new(1, -16, 1, -16),
-        BackgroundTransparency = 1, Visible = false,
-    }, panel)
-    if scroll then
-        p.BorderSizePixel = 0 p.ScrollBarThickness = 3
-        p.CanvasSize = UDim2.new() p.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local function newESP()
+    local object = { corners = {}, bones = {} }
+    for i = 1, 8 do
+        object.corners[i] = draw("Line", {
+            Thickness = 1.5, Color = Config.BoxColor, Visible = false,
+        })
     end
-    b.Activated:Connect(function() selectTab(name) end)
-    tabBtns[name], pages[name] = b, p
-    return p
-end
-
--- checkbox: dark square, red tick
-local refreshers = {}
-local function checkbox(parent, key, pos, size)
-    local box = inst("TextButton", {
-        Position = pos, Size = UDim2.fromOffset(size, size), Text = "",
-        BackgroundColor3 = Color3.fromRGB(8, 8, 10), AutoButtonColor = false,
-    }, parent)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, box)
-    local tick = inst("TextLabel", {
-        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "✔",
-        TextColor3 = Color3.fromRGB(235, 50, 50), Font = Enum.Font.GothamBold, TextSize = size - 4,
-    }, box)
-    local function refresh() tick.Visible = Config[key] and true or false end
-    refreshers[key] = refresh
-    box.Activated:Connect(function() Config[key] = not Config[key] refresh() end)
-    refresh()
-    return box
-end
-
-local function toggle(parent, order, text, key)
-    local row = inst("Frame", { LayoutOrder = order, Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 }, parent)
-    checkbox(row, key, UDim2.new(0, 0, 0.5, -13), 26)
-    local l = label(row, text, WHITE, 15, Enum.Font.GothamMedium)
-    l.Position = UDim2.fromOffset(36, 0) l.Size = UDim2.new(1, -40, 1, 0)
-    l.TextXAlignment = Enum.TextXAlignment.Left l.TextStrokeTransparency = 1
-    return row
-end
-
--- imgui-style slider: bar with value centered inside, name on the right
-local activeSlider
-local function slider(parent, order, text, key, mn, mx, step, fmt, enableKey)
-    local row = inst("Frame", {
-        LayoutOrder = order, Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1,
-    }, parent)
-
-    local x = 0
-    if enableKey then checkbox(row, enableKey, UDim2.new(0, 0, 0.5, -11), 22) x = 30 end
-
-    local bar = inst("TextButton", {
-        Text = "", AutoButtonColor = false, BackgroundColor3 = ROW,
-        Position = UDim2.fromOffset(x, 2), Size = UDim2.new(1, -(x + 150), 1, -4),
-    }, row)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, bar)
-    local fill = inst("Frame", {
-        Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = RED, BackgroundTransparency = 0.15, BorderSizePixel = 0,
-    }, bar)
-    local vl = label(bar, "", WHITE, 13, Enum.Font.GothamMedium)
-    vl.Size = UDim2.fromScale(1, 1) vl.TextStrokeTransparency = 1 vl.ZIndex = 2
-
-    local nl = label(row, text, WHITE, 13, Enum.Font.GothamMedium)
-    nl.AnchorPoint = Vector2.new(1, 0) nl.Position = UDim2.new(1, 0, 0, 0)
-    nl.Size = UDim2.new(0, 142, 1, 0) nl.TextXAlignment = Enum.TextXAlignment.Left
-    nl.TextStrokeTransparency = 1
-
-    local function set(v)
-        v = math.clamp(math.floor(v / step + 0.5) * step, mn, mx)
-        Config[key] = v
-        fill.Size = UDim2.new((v - mn) / (mx - mn), 0, 1, 0)
-        vl.Text = fmt:format(v)
+    for i = 1, #R15 do
+        object.bones[i] = draw("Line", {
+            Thickness = 1.5, Visible = false,
+        })
     end
-    local function fromX(px)
-        local a = math.clamp((px - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
-        set(mn + a * (mx - mn))
-    end
-    bar.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-            activeSlider = fromX
-            fromX(i.Position.X)
-        end
-    end)
-    set(Config[key])
-end
-
-local function listPage(page, pad)
-    inst("UIListLayout", { Padding = UDim.new(0, pad or 8), SortOrder = Enum.SortOrder.LayoutOrder }, page)
-end
-
-local function bigButton(parent, order, text, color, size)
-    local b = inst("TextButton", {
-        LayoutOrder = order, Size = size, BackgroundColor3 = color, Text = text,
-        TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 15, AutoButtonColor = true,
-    }, parent)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, b)
-    return b
-end
-
--- ESP tab
-local espPage = addTab("👁️ ESP", false)
-
-local espKeys = {
-    "Enabled", "Box", "Health", "Name", "Item", "Dist", "Bones", "RootDot", "Warn", "Counter", "Fps",
-}
-local function setAll(v)
-    for _, k in ipairs(espKeys) do
-        Config[k] = v
-        if refreshers[k] then refreshers[k]() end
-    end
-end
-
-local topRow = inst("Frame", { Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1 }, espPage)
-local onBtn  = bigButton(topRow, 1, "ESP ALL ON",  RED, UDim2.new(0.5, -4, 1, 0))
-local offBtn = bigButton(topRow, 2, "ESP ALL OFF", Color3.fromRGB(70, 70, 80), UDim2.new(0.5, -4, 1, 0))
-offBtn.AnchorPoint = Vector2.new(1, 0) offBtn.Position = UDim2.new(1, 0, 0, 0)
-onBtn.Activated:Connect(function() setAll(true) end)
-offBtn.Activated:Connect(function() setAll(false) end)
-
-local grid = inst("ScrollingFrame", {
-    Position = UDim2.fromOffset(0, 40), Size = UDim2.new(1, 0, 1, -40),
-    BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
-    CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
-}, espPage)
-inst("UIGridLayout", {
-    CellSize = UDim2.new(0.5, -6, 0, 30), CellPadding = UDim2.fromOffset(8, 6),
-    SortOrder = Enum.SortOrder.LayoutOrder,
-}, grid)
-local espItems = {
-    {"Box", "Box"},           {"Team check", "TeamCheck"},
-    {"Health", "Health"},     {"Aim warning", "Warn"},
-    {"Name", "Name"},         {"Enemy counter", "Counter"},
-    {"Held item", "Item"},    {"FPS", "Fps"},
-    {"Distance", "Dist"},     {"ESP master", "Enabled"},
-    {"Skeleton", "Bones"},    {"Root dot", "RootDot"},
-}
-for i, it in ipairs(espItems) do toggle(grid, i, it[1], it[2]) end
-
--- Character tab
-local charPage = addTab("🧍 Char", false)
-listPage(charPage, 8)
-slider(charPage, 1, "Walk speed",   "Speed", 16, 150, 1,    "%d",    "SpeedOn")
-toggle(charPage, 2, "Speed Bypass (Spoof 16)", "SpeedBypass")
-slider(charPage, 3, "Jump power",   "Jump",  50, 250, 1,    "%d",    "JumpOn")
-slider(charPage, 4, "Gravity",      "Grav",  20, 196, 1,    "%d",    "GravOn")
-slider(charPage, 5, "Head size",    "Head",  1,  5,   0.1,  "%.1fx", "HeadOn")
-slider(charPage, 6, "Transparency", "Trans", 0,  1,   0.05, "%.2f",  "TransOn")
-
--- Auto-Aim tab
-local aimPage = addTab("🎯 Aim", false)
-listPage(aimPage, 8)
-toggle(aimPage, 1, "Aimbot", "AimEnabled")
-toggle(aimPage, 2, "Silent Aim (Move HRP)", "SilentAim")
-toggle(aimPage, 3, "Character Lock", "CharLock")
-toggle(aimPage, 4, "Camera Lock", "CamLock")
-toggle(aimPage, 5, "Visibility Check (LOS)", "VisCheck")
-toggle(aimPage, 6, "Prediction", "PredictionOn")
-slider(aimPage, 7, "Prediction Val", "PredictionVal", 0, 0.5, 0.05, "%.2fs", "PredictionOn")
-slider(aimPage, 8, "FOV Radius", "AimFov", 10, 1000, 10, "%d px")
-slider(aimPage, 9, "Max Studs", "AimDist", 50, 1000, 50, "%d studs")
-slider(aimPage, 10, "Aim Smoothness", "AimSmooth", 1, 20, 1, "%d")
-
--- Catalog tab
-do
-    local HttpService = game:GetService("HttpService")
-    local Market      = game:GetService("MarketplaceService")
-    local httpReq     = request or http_request or (syn and syn.request) or (http and http.request)
-    local clip        = setclipboard or toclipboard
-
-    local catPage = addTab("🛒 Catalog", false)
-    local PAGE_SIZE = 30
-    local GAP = 1.2
-
-    local PRICES = {
-        { name = "Any price" },
-        { name = "Free", query = "&MaxPrice=0" },
-        { name = "Paid", query = "&MinPrice=1" },
-    }
-
-    local SORTS = {
-        { name = "Relevance" },
-        { name = "Best selling", q = "&SortType=2" },
-        { name = "Newest",       q = "&SortType=3" },
-        { name = "Price ↑",      q = "&SortType=4" },
-        { name = "Price ↓",      q = "&SortType=5" },
-    }
-
-    local ACC = { [8]=true, [41]=true, [42]=true, [43]=true, [44]=true, [45]=true, [46]=true, [47]=true }
-    local FILTERS = {
-        { name = "All" },
-        { name = "Accessories",     cat = "Accessories", types = ACC },
-        { name = "Hats",            cat = "Accessories", sub = "HatAccessories",      types = { [8]=true } },
-        { name = "Hair",            cat = "Accessories", sub = "HairAccessories",     types = { [41]=true } },
-        { name = "Face",            cat = "Accessories", sub = "FaceAccessories",     types = { [42]=true } },
-        { name = "Neck",            cat = "Accessories", sub = "NeckAccessories",     types = { [43]=true } },
-        { name = "Shoulder",        cat = "Accessories", sub = "ShoulderAccessories", types = { [44]=true } },
-        { name = "Front",           cat = "Accessories", sub = "FrontAccessories",    types = { [45]=true } },
-        { name = "Back",            cat = "Accessories", sub = "BackAccessories",     types = { [46]=true } },
-        { name = "Waist",           cat = "Accessories", sub = "WaistAccessories",    types = { [47]=true } },
-        { name = "Classic Shirts",  cat = "Clothing", sub = "ClassicShirts",  types = { [11]=true } },
-        { name = "Classic T-Shirts",cat = "Clothing", sub = "ClassicTShirts", types = { [2]=true } },
-        { name = "Classic Pants",   cat = "Clothing", sub = "ClassicPants",   types = { [12]=true } },
-        { name = "Gear",            cat = "Gear", types = { [19]=true } },
-    }
-
-    local filterIdx, priceIdx, sortIdx, searchToken, selected = 1, 1, 1, 0, nil
-    local page, hasNext, cursors = 1, false, {}
-    local lastCode = "?"
-    local lastReq = 0
-    local status
-
-    local function getJson(url, token)
-        if not httpReq then return nil end
-        for attempt = 1, 4 do
-            local wait = lastReq + GAP - os.clock()
-            if wait > 0 then task.wait(wait) end
-            if token and token ~= searchToken then return nil end
-            lastReq = os.clock()
-
-            local ok, res = pcall(httpReq, { Url = url, Method = "GET" })
-            if not ok or not res then lastCode = "no response" return nil end
-            lastCode = tostring(res.StatusCode)
-
-            if res.StatusCode == 429 then
-                if attempt == 4 then return nil end
-                local h = res.Headers
-                local ra = tonumber(h and (h["retry-after"] or h["Retry-After"])) or (2 * attempt)
-                ra = math.clamp(ra, 2, 10)
-                if status and status.Parent then
-                    status.Text = ("rate limited, retrying in %ds..."):format(ra)
-                end
-                task.wait(ra)
-                if token and token ~= searchToken then return nil end
-            else
-                if res.StatusCode ~= 200 then return nil end
-                local ok2, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-                return ok2 and data or nil
-            end
-        end
-        return nil
-    end
-
-    local top = inst("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1 }, catPage)
-    local goBtn = inst("TextButton", {
-        AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Size = UDim2.fromOffset(70, 30),
-        BackgroundColor3 = RED, Text = "Search", TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
-    }, top)
-    local box = inst("TextBox", {
-        Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, -76, 1, 0), BackgroundColor3 = ROW,
-        Text = "", PlaceholderText = "search catalog...", PlaceholderColor3 = Color3.fromRGB(130, 130, 140),
-        TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13, ClearTextOnFocus = false,
-    }, top)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, box)
-
-    local chips = inst("ScrollingFrame", {
-        Position = UDim2.fromOffset(0, 36), Size = UDim2.new(1, 0, 0, 26),
-        BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
-        ScrollingDirection = Enum.ScrollingDirection.X,
-        CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.X,
-    }, catPage)
-    inst("UIListLayout", {
-        FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5),
+    object.hpBack = draw("Line", {
+        Thickness = 4, Color = Color3.new(), Visible = false,
+    })
+    object.hpBar = draw("Line", {
+        Thickness = 2, Color = Color3.new(0, 1, 0), Visible = false,
+    })
+    object.dot = draw("Circle", {
+        Radius = 3, Filled = true, NumSides = 12, Visible = false,
+    })
+    object.holder = instance("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0),
+        Size = UDim2.fromOffset(220, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        Visible = false,
+    }, overlay)
+    instance("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
-    }, chips)
-    local chipBtns, priceBtns, sortBtns = {}, {}, {}
+    }, object.holder)
 
-    local results = inst("ScrollingFrame", {
-        Position = UDim2.fromOffset(0, 66), Size = UDim2.new(1, 0, 1, -138),
-        BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
-        CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    }, catPage)
-    inst("UIGridLayout", {
-        CellSize = UDim2.fromOffset(104, 140), CellPadding = UDim2.fromOffset(6, 6),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    }, results)
-
-    status = label(results, "", WHITE, 13, Enum.Font.GothamMedium)
-    status.Size = UDim2.fromOffset(300, 30) status.TextStrokeTransparency = 1 status.LayoutOrder = -1
-    status.TextXAlignment = Enum.TextXAlignment.Left
-
-    local pager = inst("Frame", {
-        AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, -38),
-        Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1,
-    }, catPage)
-    local function pagerBtn(text, anchorX, xPos)
-        local b = inst("TextButton", {
-            AnchorPoint = Vector2.new(anchorX, 0), Position = UDim2.new(xPos, 0, 0, 0), Size = UDim2.fromOffset(90, 28),
-            BackgroundColor3 = ROW, Text = text, TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
-        }, pager)
-        inst("UIStroke", { Color = DIM, Thickness = 1 }, b)
-        return b
+    local function row(order, color)
+        local label = textLabel(object.holder, "", color, Config.TextSize)
+        label.LayoutOrder = order
+        label.Size = UDim2.new(1, 0, 0, Config.TextSize + 2)
+        return label
     end
-    local prevBtn = pagerBtn("◀ Prev", 0, 0)
-    local nextBtn = pagerBtn("Next ▶", 1, 1)
-    local pageLbl = label(pager, "Page 1", WHITE, 13, Enum.Font.GothamMedium)
-    pageLbl.Size = UDim2.fromScale(1, 1) pageLbl.TextStrokeTransparency = 1
-
-    local bar = inst("Frame", {
-        AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0),
-        Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = ROW,
-    }, catPage)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, bar)
-    local selLabel = label(bar, "tap an item to copy its id", WHITE, 12, Enum.Font.GothamMedium)
-    selLabel.Position = UDim2.fromOffset(8, 0) selLabel.Size = UDim2.new(1, -190, 1, 0)
-    selLabel.TextXAlignment = Enum.TextXAlignment.Left selLabel.TextStrokeTransparency = 1
-    selLabel.TextTruncate = Enum.TextTruncate.AtEnd
-
-    local function barBtn(text, xOff, color)
-        local b = inst("TextButton", {
-            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, xOff, 0.5, 0), Size = UDim2.fromOffset(84, 24),
-            BackgroundColor3 = color, Text = text, TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 12,
-        }, bar)
-        inst("UICorner", { CornerRadius = UDim.new(0, 4) }, b)
-        return b
-    end
-    local buyBtn  = barBtn("Get / Buy", -6,  RED)
-    local copyBtn = barBtn("Copy ID",   -96, Color3.fromRGB(70, 70, 80))
-
-    buyBtn.Activated:Connect(function()
-        if not selected then return end
-        pcall(function()
-            if selected.itemType == "Bundle" then
-                Market:PromptBundlePurchase(lp, selected.id)
-            else
-                Market:PromptPurchase(lp, selected.id)
-            end
-        end)
-    end)
-    copyBtn.Activated:Connect(function()
-        if selected and clip then
-            clip(tostring(selected.id))
-            selLabel.Text = "copied " .. selected.id
-        end
-    end)
-
-    local function clearResults()
-        for _, c in ipairs(results:GetChildren()) do
-            if c:IsA("GuiButton") then c:Destroy() end
-        end
-        results.CanvasPosition = Vector2.zero
-    end
-
-    local function updatePager()
-        pageLbl.Text = "Page " .. page
-        prevBtn.TextTransparency = (page > 1) and 0 or 0.6
-        nextBtn.TextTransparency = hasNext and 0 or 0.6
-    end
-
-    local function fmtPrice(pr, st)
-        if pr == nil then return st or "Off sale" end
-        if pr == 0 then return "Free" end
-        return Config.RobuxIcon .. " " .. pr
-    end
-
-    local function setInfo(item, name, priceText)
-        if name then item.name = name end
-        if priceText then item.priceText = priceText end
-        if item.nameLbl and item.nameLbl.Parent then
-            item.nameLbl.Text = item.name or ("id " .. item.id)
-            item.priceLbl.Text = item.priceText or ""
-        end
-    end
-
-    local function rankByName(items, text)
-        local words = {}
-        for w in text:lower():gmatch("%S+") do words[#words + 1] = w end
-        if #words == 0 then return end
-        for i, it in ipairs(items) do
-            local nm = (it.name or ""):lower()
-            local s = 0
-            for _, w in ipairs(words) do
-                if nm:find(w, 1, true) then s += 1 end
-            end
-            it.score, it.idx = s, i
-        end
-        table.sort(items, function(a, b)
-            if a.score ~= b.score then return a.score > b.score end
-            return a.idx < b.idx
-        end)
-    end
-
-    local function addCell(item, order)
-        local cell = inst("TextButton", {
-            LayoutOrder = order, BackgroundColor3 = ROW, Text = "", AutoButtonColor = true,
-        }, results)
-        inst("UIStroke", { Color = DIM, Thickness = 1 }, cell)
-        local kind = item.itemType == "Bundle" and "BundleThumbnail" or "Asset"
-        inst("ImageLabel", {
-            Position = UDim2.fromOffset(4, 4), Size = UDim2.new(1, -8, 0, 82), BackgroundTransparency = 1,
-            Image = ("rbxthumb://type=%s&id=%d&w=150&h=150"):format(kind, item.id),
-        }, cell)
-
-        local n = label(cell, item.name or ("id " .. item.id), WHITE, 11, Enum.Font.GothamMedium)
-        n.Position = UDim2.fromOffset(4, 88) n.Size = UDim2.new(1, -8, 0, 28)
-        n.TextWrapped = true n.TextTruncate = Enum.TextTruncate.AtEnd
-        n.TextXAlignment = Enum.TextXAlignment.Left n.TextYAlignment = Enum.TextYAlignment.Top
-        n.TextStrokeTransparency = 1
-
-        local p = label(cell, item.priceText or "", Color3.fromRGB(235, 80, 80), 11, Enum.Font.GothamBold)
-        p.Position = UDim2.fromOffset(4, 118) p.Size = UDim2.new(1, -8, 0, 16)
-        p.TextXAlignment = Enum.TextXAlignment.Left p.TextStrokeTransparency = 1
-
-        item.nameLbl, item.priceLbl = n, p
-
-        cell.Activated:Connect(function()
-            selected = item
-            local nm = item.name or "?"
-            if clip then
-                clip(tostring(item.id))
-                selLabel.Text = ("copied %d  |  %s"):format(item.id, nm)
-                p.Text = "✔ copied"
-                task.delay(1.2, function()
-                    if p.Parent then p.Text = item.priceText or "" end
-                end)
-            else
-                selLabel.Text = ("%s  [%d]  (no clipboard on this executor)"):format(nm, item.id)
-            end
-        end)
-    end
-
-    local function search()
-        searchToken += 1
-        local token = searchToken
-        clearResults()
-        selected = nil
-        selLabel.Text = "tap an item to copy its id"
-        hasNext = false
-        updatePager()
-        if not httpReq then
-            status.Text = "your executor has no request() function"
-            return
-        end
-        status.Text = "loading..."
-        task.spawn(function()
-            local text = (box.Text:gsub("^%s+", ""):gsub("%s+$", ""))
-            local kw = HttpService:UrlEncode(text)
-            local items, limited = {}, false
-
-            local f, pf, sf = FILTERS[filterIdx], PRICES[priceIdx], SORTS[sortIdx]
-            local api  = "https://catalog.roblox.com/v1/search/items/details?Keyword=" .. kw
-            local sq, pq = sf.q or "", pf.query or ""
-            local catQ = f.cat and ("&Category=" .. f.cat) or ""
-            local subQ = f.sub and ("&Subcategory=" .. f.sub) or ""
-            local url = api .. "&Limit=" .. PAGE_SIZE .. "&SalesTypeFilter=1" .. sq .. pq .. catQ .. subQ
-
-            local cursor = cursors[page]
-            if cursor and cursor ~= "" then
-                url = url .. "&Cursor=" .. HttpService:UrlEncode(cursor)
-            end
-
-            local d = getJson(url, token)
-            if lastCode == "429" then limited = true end
-            if d then
-                for _, e in ipairs(d.data or {}) do
-                    local pr = e.price
-                    if pr == nil then pr = e.lowestPrice end
-                    local keep = true
-                    if priceIdx == 2 and pr ~= nil and pr > 0 then keep = false end
-                    if priceIdx == 3 and pr ~= nil and pr == 0 then keep = false end
-                    if keep then
-                        items[#items + 1] = {
-                            id = e.id, itemType = e.itemType, name = e.name,
-                            priceText = fmtPrice(pr, e.priceStatus),
-                        }
-                    end
-                end
-                cursor = d.nextPageCursor
-            end
-
-            if cursor and cursor ~= "" then
-                cursors[page + 1] = cursor
-                hasNext = true
-            end
-
-            if token ~= searchToken then return end
-            updatePager()
-            if #items == 0 then
-                if limited or lastCode == "429" then
-                    status.Text = "roblox rate limited you (429). wait ~30s"
-                else
-                    status.Text = "no results (http " .. lastCode .. ")"
-                end
-                return
-            end
-            status.Text = ""
-            if sortIdx == 1 then rankByName(items, text) end
-            for i, it in ipairs(items) do addCell(it, i) end
-        end)
-    end
-
-    local function newSearch()
-        page, cursors = 1, {}
-        search()
-    end
-
-    local function refreshChips()
-        for i, b in ipairs(chipBtns) do b.BackgroundColor3 = (i == filterIdx) and RED or ROW end
-        for i, b in ipairs(priceBtns) do b.BackgroundColor3 = (i == priceIdx) and RED or ROW end
-        for i, b in ipairs(sortBtns) do b.BackgroundColor3 = (i == sortIdx) and RED or ROW end
-    end
-    local function makeChip(text, order, onTap)
-        local b = inst("TextButton", {
-            LayoutOrder = order, Size = UDim2.fromOffset(0, 26), AutomaticSize = Enum.AutomaticSize.X,
-            BackgroundColor3 = ROW, Text = text, TextColor3 = WHITE,
-            Font = Enum.Font.GothamMedium, TextSize = 12, AutoButtonColor = false,
-        }, chips)
-        inst("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, b)
-        inst("UICorner", { CornerRadius = UDim.new(0, 5) }, b)
-        inst("UIStroke", { Color = DIM, Thickness = 1 }, b)
-        b.Activated:Connect(onTap)
-        return b
-    end
-    for i, p in ipairs(PRICES) do
-        priceBtns[i] = makeChip(p.name, i, function()
-            if priceIdx == i then return end
-            priceIdx = i
-            refreshChips()
-            newSearch()
-        end)
-    end
-    for i, s in ipairs(SORTS) do
-        sortBtns[i] = makeChip(s.name, 10 + i, function()
-            if sortIdx == i then return end
-            sortIdx = i
-            refreshChips()
-            newSearch()
-        end)
-    end
-    for i, f in ipairs(FILTERS) do
-        chipBtns[i] = makeChip(f.name, 30 + i, function()
-            if filterIdx == i then return end
-            filterIdx = i
-            refreshChips()
-            newSearch()
-        end)
-    end
-    refreshChips()
-
-    goBtn.Activated:Connect(newSearch)
-    box.FocusLost:Connect(function(enter) if enter then newSearch() end end)
-    prevBtn.Activated:Connect(function() if page > 1 then page -= 1 search() end end)
-    nextBtn.Activated:Connect(function() if hasNext then page += 1 search() end end)
-    updatePager()
+    object.name = row(1, Config.NameColor)
+    object.item = row(2, Config.ItemColor)
+    object.dist = row(3, Config.DistColor)
+    return object
 end
 
--- Creator Store tab
-do
-    local HttpService = game:GetService("HttpService")
-    local Market      = game:GetService("MarketplaceService")
-    local httpReq     = request or http_request or (syn and syn.request) or (http and http.request)
-    local clip        = setclipboard or toclipboard
-
-    local storePage = addTab("📦 Store", false)
-    local PAGE_SIZE = 30
-    local GAP = 1.2
-
-    local MODES = {
-        { name = "Models",  cat = "Model",  toolbox = 10 },
-        { name = "Decals",  cat = "Decal",  toolbox = 13 },
-        { name = "Audio",   cat = "Audio",  toolbox = 3  },
-        { name = "Plugins", cat = "Plugin", toolbox = 38 },
-    }
-
-    local modeIdx, searchToken, selected = 1, 0, nil
-    local page, hasNext, cursors = 1, false, {}
-    local lastCode = "?"
-    local lastReq = 0
-    local status
-
-    local function getJson(url, token)
-        if not httpReq then return nil end
-        for attempt = 1, 4 do
-            local wait = lastReq + GAP - os.clock()
-            if wait > 0 then task.wait(wait) end
-            if token and token ~= searchToken then return nil end
-            lastReq = os.clock()
-
-            local ok, res = pcall(httpReq, { Url = url, Method = "GET" })
-            if not ok or not res then lastCode = "no response" return nil end
-            lastCode = tostring(res.StatusCode)
-
-            if res.StatusCode == 429 then
-                if attempt == 4 then return nil end
-                local h = res.Headers
-                local ra = tonumber(h and (h["retry-after"] or h["Retry-After"])) or (2 * attempt)
-                ra = math.clamp(ra, 2, 10)
-                if status and status.Parent then
-                    status.Text = ("rate limited, retrying in %ds..."):format(ra)
-                end
-                task.wait(ra)
-                if token and token ~= searchToken then return nil end
-            else
-                if res.StatusCode ~= 200 then return nil end
-                local ok2, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-                return ok2 and data or nil
-            end
-        end
-        return nil
+local function hideESP(object)
+    for _, line in ipairs(object.corners) do
+        line.Visible = false
     end
-
-    local top = inst("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1 }, storePage)
-    local modeBtn = inst("TextButton", {
-        Size = UDim2.fromOffset(80, 30), BackgroundColor3 = ROW, Text = MODES[1].name,
-        TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
-    }, top)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, modeBtn)
-    local goBtn = inst("TextButton", {
-        AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Size = UDim2.fromOffset(70, 30),
-        BackgroundColor3 = RED, Text = "Search", TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
-    }, top)
-    local box = inst("TextBox", {
-        Position = UDim2.fromOffset(86, 0), Size = UDim2.new(1, -162, 1, 0), BackgroundColor3 = ROW,
-        Text = "", PlaceholderText = "search creator store...", PlaceholderColor3 = Color3.fromRGB(130, 130, 140),
-        TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13, ClearTextOnFocus = false,
-    }, top)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, box)
-
-    local results = inst("ScrollingFrame", {
-        Position = UDim2.fromOffset(0, 36), Size = UDim2.new(1, 0, 1, -108),
-        BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3,
-        CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    }, storePage)
-    inst("UIGridLayout", {
-        CellSize = UDim2.fromOffset(104, 140), CellPadding = UDim2.fromOffset(6, 6),
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    }, results)
-
-    status = label(results, "", WHITE, 13, Enum.Font.GothamMedium)
-    status.Size = UDim2.fromOffset(300, 30) status.TextStrokeTransparency = 1 status.LayoutOrder = -1
-    status.TextXAlignment = Enum.TextXAlignment.Left
-
-    local pager = inst("Frame", {
-        AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, -38),
-        Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1,
-    }, storePage)
-    local function pagerBtn(text, anchorX, xPos)
-        local b = inst("TextButton", {
-            AnchorPoint = Vector2.new(anchorX, 0), Position = UDim2.new(xPos, 0, 0, 0), Size = UDim2.fromOffset(90, 28),
-            BackgroundColor3 = ROW, Text = text, TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 13,
-        }, pager)
-        inst("UIStroke", { Color = DIM, Thickness = 1 }, b)
-        return b
+    for _, line in ipairs(object.bones) do
+        line.Visible = false
     end
-    local prevBtn = pagerBtn("◀ Prev", 0, 0)
-    local nextBtn = pagerBtn("Next ▶", 1, 1)
-    local pageLbl = label(pager, "Page 1", WHITE, 13, Enum.Font.GothamMedium)
-    pageLbl.Size = UDim2.fromScale(1, 1) pageLbl.TextStrokeTransparency = 1
-
-    local bar = inst("Frame", {
-        AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 0),
-        Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = ROW,
-    }, storePage)
-    inst("UIStroke", { Color = DIM, Thickness = 1 }, bar)
-    local selLabel = label(bar, "tap an item to copy its id", WHITE, 12, Enum.Font.GothamMedium)
-    selLabel.Position = UDim2.fromOffset(8, 0) selLabel.Size = UDim2.new(1, -190, 1, 0)
-    selLabel.TextXAlignment = Enum.TextXAlignment.Left selLabel.TextStrokeTransparency = 1
-    selLabel.TextTruncate = Enum.TextTruncate.AtEnd
-
-    local function barBtn(text, xOff, color)
-        local b = inst("TextButton", {
-            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, xOff, 0.5, 0), Size = UDim2.fromOffset(84, 24),
-            BackgroundColor3 = color, Text = text, TextColor3 = WHITE, Font = Enum.Font.GothamMedium, TextSize = 12,
-        }, bar)
-        inst("UICorner", { CornerRadius = UDim.new(0, 4) }, b)
-        return b
-    end
-    local buyBtn  = barBtn("Get / Buy", -6,  RED)
-    local copyBtn = barBtn("Copy ID",   -96, Color3.fromRGB(70, 70, 80))
-
-    buyBtn.Activated:Connect(function()
-        if not selected then return end
-        pcall(function()
-            Market:PromptPurchase(lp, selected.id)
-        end)
-    end)
-    copyBtn.Activated:Connect(function()
-        if selected and clip then
-            clip(tostring(selected.id))
-            selLabel.Text = "copied " .. selected.id
-        end
-    end)
-
-    local function clearResults()
-        for _, c in ipairs(results:GetChildren()) do
-            if c:IsA("GuiButton") then c:Destroy() end
-        end
-        results.CanvasPosition = Vector2.zero
-    end
-
-    local function updatePager()
-        pageLbl.Text = "Page " .. page
-        prevBtn.TextTransparency = (page > 1) and 0 or 0.6
-        nextBtn.TextTransparency = hasNext and 0 or 0.6
-    end
-
-    local function addCell(item, order)
-        local cell = inst("TextButton", {
-            LayoutOrder = order, BackgroundColor3 = ROW, Text = "", AutoButtonColor = true,
-        }, results)
-        inst("UIStroke", { Color = DIM, Thickness = 1 }, cell)
-        inst("ImageLabel", {
-            Position = UDim2.fromOffset(4, 4), Size = UDim2.new(1, -8, 0, 82), BackgroundTransparency = 1,
-            Image = ("rbxthumb://type=Asset&id=%d&w=150&h=150"):format(item.id),
-        }, cell)
-
-        local n = label(cell, item.name or ("id " .. item.id), WHITE, 11, Enum.Font.GothamMedium)
-        n.Position = UDim2.fromOffset(4, 88) n.Size = UDim2.new(1, -8, 0, 28)
-        n.TextWrapped = true n.TextTruncate = Enum.TextTruncate.AtEnd
-        n.TextXAlignment = Enum.TextXAlignment.Left n.TextYAlignment = Enum.TextYAlignment.Top
-        n.TextStrokeTransparency = 1
-
-        local p = label(cell, "", Color3.fromRGB(235, 80, 80), 11, Enum.Font.GothamBold)
-        p.Position = UDim2.fromOffset(4, 118) p.Size = UDim2.new(1, -8, 0, 16)
-        p.TextXAlignment = Enum.TextXAlignment.Left p.TextStrokeTransparency = 1
-
-        item.nameLbl, item.priceLbl = n, p
-
-        cell.Activated:Connect(function()
-            selected = item
-            local nm = item.name or "?"
-            if clip then
-                clip(tostring(item.id))
-                selLabel.Text = ("copied %d  |  %s"):format(item.id, nm)
-                p.Text = "✔ copied"
-                task.delay(1.2, function()
-                    if p.Parent then p.Text = "" end
-                end)
-            else
-                selLabel.Text = ("%s  [%d]"):format(nm, item.id)
-            end
-        end)
-    end
-
-    local function search()
-        searchToken += 1
-        local token = searchToken
-        clearResults()
-        selected = nil
-        selLabel.Text = "tap an item to copy its id"
-        hasNext = false
-        updatePager()
-        if not httpReq then
-            status.Text = "your executor has no request() function"
-            return
-        end
-        status.Text = "loading..."
-        task.spawn(function()
-            local text = (box.Text:gsub("^%s+", ""):gsub("%s+$", ""))
-            local kw = HttpService:UrlEncode(text)
-            local mode = MODES[modeIdx]
-            local items, limited = {}, false
-
-            local url = ("https://apis.roblox.com/toolbox-service/v2/assets:search?searchCategoryType=%s&query=%s&maxPageSize=%d")
-                :format(mode.cat, kw, PAGE_SIZE)
-            if cursors[page] and cursors[page] ~= "" then
-                url = url .. "&pageToken=" .. HttpService:UrlEncode(cursors[page])
-            end
-            local d = getJson(url, token)
-            if lastCode == "429" then limited = true end
-            for _, e in ipairs(d and d.creatorStoreAssets or {}) do
-                local a = e.asset
-                if a and a.id then
-                    items[#items + 1] = { id = a.id, itemType = "Asset", name = a.name }
-                end
-            end
-            if #items > 0 then
-                if d.nextPageToken and d.nextPageToken ~= "" then
-                    cursors[page + 1] = d.nextPageToken
-                    hasNext = true
-                end
-            elseif not limited then
-                local d2 = getJson(("https://apis.roblox.com/toolbox-service/v1/marketplace/%d?keyword=%s&limit=%d&pageNumber=%d&sortType=Relevance")
-                    :format(mode.toolbox, kw, PAGE_SIZE, page - 1), token)
-                if lastCode == "429" then limited = true end
-                for _, e in ipairs(d2 and d2.data or {}) do
-                    items[#items + 1] = { id = e.id, itemType = "Asset" }
-                end
-                hasNext = #items >= PAGE_SIZE
-            end
-
-            if token ~= searchToken then return end
-            updatePager()
-            if #items == 0 then
-                if limited or lastCode == "429" then
-                    status.Text = "roblox rate limited you (429). wait ~30s"
-                else
-                    status.Text = "no results (http " .. lastCode .. ")"
-                end
-                return
-            end
-            status.Text = ""
-            for i, it in ipairs(items) do addCell(it, i) end
-        end)
-    end
-
-    local function newSearch()
-        page, cursors = 1, {}
-        search()
-    end
-
-    modeBtn.Activated:Connect(function()
-        modeIdx = modeIdx % #MODES + 1
-        modeBtn.Text = MODES[modeIdx].name
-        newSearch()
-    end)
-    goBtn.Activated:Connect(newSearch)
-    box.FocusLost:Connect(function(enter) if enter then newSearch() end end)
-    prevBtn.Activated:Connect(function() if page > 1 then page -= 1 search() end end)
-    nextBtn.Activated:Connect(function() if hasNext then page += 1 search() end end)
-    updatePager()
+    object.hpBack.Visible = false
+    object.hpBar.Visible = false
+    object.dot.Visible = false
+    object.holder.Visible = false
 end
 
--- Settings tab
-local setPage = addTab("⚙️ Config", false)
-listPage(setPage, 8)
-slider(setPage, 1, "ESP range",      "MaxDistance", 100, 5000, 50, "%d")
-slider(setPage, 2, "Counter radius", "CountRadius", 50, 2000, 50, "%d")
-local unloadBtn = bigButton(setPage, 3, "Unload hack", ROW, UDim2.new(1, 0, 0, 40))
-
-local kickBtn = bigButton(setPage, 4, "Kick myself", Color3.fromRGB(150, 40, 40), UDim2.new(1, 0, 0, 40))
-local kickArmed = false
-kickBtn.Activated:Connect(function()
-    if kickArmed then
-        lp:Kick(Config.KickMessage)
+local function untrack(player)
+    local object = tracked[player]
+    if not object then
         return
     end
-    kickArmed = true
-    kickBtn.Text = "Tap again to confirm"
-    task.delay(3, function()
-        kickArmed = false
-        if kickBtn.Parent then kickBtn.Text = "Kick myself" end
-    end)
-end)
+    tracked[player] = nil
+    for _, line in ipairs(object.corners) do
+        removeDrawing(line)
+    end
+    for _, line in ipairs(object.bones) do
+        removeDrawing(line)
+    end
+    removeDrawing(object.hpBack)
+    removeDrawing(object.hpBar)
+    removeDrawing(object.dot)
+    object.holder:Destroy()
+end
 
-selectTab("👁️ ESP")
+local function track(player)
+    if alive and player ~= lp and not tracked[player] then
+        tracked[player] = newESP()
+    end
+end
 
-local dragging, dragStart, startPos
-title.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-        dragging, dragStart, startPos = true, i.Position, window.Position
+for _, player in ipairs(Players:GetPlayers()) do
+    track(player)
+end
+connect(Players.PlayerAdded, track)
+connect(Players.PlayerRemoving, untrack)
+
+---------------------------------------------------------------- REMOTE INDEX LIFECYCLE
+
+connect(game.DescendantAdded, function(object)
+    if isRemote(object) then
+        Snap.registry[object] = true
+        queueSnapRefresh()
     end
 end)
-table.insert(conns, UserInputService.InputChanged:Connect(function(i)
-    local moving = i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch
-    if not moving then return end
-    if activeSlider then
-        activeSlider(i.Position.X)
-    elseif dragging then
-        local d = i.Position - dragStart
-        window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+
+connect(game.DescendantRemoving, function(object)
+    if Snap.registry[object] or Snap.matches[object] then
+        Snap.registry[object] = nil
+        Snap.matches[object] = nil
+        restoreRemoteListeners(object)
+        queueSnapRefresh()
     end
-end))
-table.insert(conns, UserInputService.InputEnded:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-        dragging, activeSlider = false, nil
-    end
-end))
+end)
 
-local openBtn = inst("TextButton", {
-    Position = UDim2.new(0, 8, 0.5, -20), Size = UDim2.fromOffset(44, 40),
-    BackgroundColor3 = BG, Text = "HX", TextColor3 = RED,
-    Font = Enum.Font.GothamBold, TextSize = 14,
-}, gui)
-inst("UICorner", { CornerRadius = UDim.new(0, 8) }, openBtn)
-inst("UIStroke", { Color = RED, Thickness = 1.5 }, openBtn)
-openBtn.Activated:Connect(function() window.Visible = not window.Visible end)
+scanAllRemotes()
 
----------------------------------------------------------------- esp objects
-local function newEsp()
-    local o = { corners = {}, bones = {} }
-    for i = 1, 8 do o.corners[i] = mk("Line", { Thickness = 1.5, Color = Config.BoxColor, Visible = false }) end
-    for i = 1, #R15 do o.bones[i] = mk("Line", { Thickness = 1.5, Visible = false }) end
-    o.hpBack = mk("Line", { Thickness = 4, Color = Color3.new(0, 0, 0), Visible = false })
-    o.hpBar  = mk("Line", { Thickness = 2, Color = Color3.new(0, 1, 0), Visible = false })
-    o.dot    = mk("Circle", { Radius = 3, Filled = true, NumSides = 12, Visible = false })
+---------------------------------------------------------------- HELPERS
 
-    o.holder = inst("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(200, 0),
-        AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false,
-    }, gui)
-    inst("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }, o.holder)
-    local function row(n, color)
-        local l = label(o.holder, "", color, Config.TextSize)
-        l.LayoutOrder = n l.Size = UDim2.new(1, 0, 0, Config.TextSize + 2)
-        return l
-    end
-    o.name = row(1, Config.NameColor)
-    o.item = row(2, Config.ItemColor)
-    o.dist = row(3, Config.DistColor)
-    return o
-end
-
-local function hide(o)
-    for _, l in ipairs(o.corners) do l.Visible = false end
-    for _, l in ipairs(o.bones)   do l.Visible = false end
-    o.hpBack.Visible, o.hpBar.Visible, o.dot.Visible = false, false, false
-    o.holder.Visible = false
-end
-
-local function destroy(o)
-    for _, l in ipairs(o.corners) do l:Remove() end
-    for _, l in ipairs(o.bones)   do l:Remove() end
-    o.hpBack:Remove() o.hpBar:Remove() o.dot:Remove()
-    o.holder:Destroy()
-end
-
-local tracked = {}
-local function track(plr)
-    if plr ~= lp and not tracked[plr] then tracked[plr] = newEsp() end
-end
-local function untrack(plr)
-    local o = tracked[plr]
-    if o then destroy(o) tracked[plr] = nil end
-end
-for _, p in ipairs(Players:GetPlayers()) do track(p) end
-table.insert(conns, Players.PlayerAdded:Connect(track))
-table.insert(conns, Players.PlayerRemoving:Connect(untrack))
-
----------------------------------------------------------------- helpers
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 rayParams.IgnoreWater = true
 
-local function isVisible(char, targetPart)
+local warningRay = RaycastParams.new()
+warningRay.FilterType = Enum.RaycastFilterType.Exclude
+warningRay.IgnoreWater = true
+
+local function sameTeam(player)
+    return Config.TeamCheck and player.Team ~= nil
+        and lp.Team ~= nil and player.Team == lp.Team
+end
+
+local function visible(character, part)
     local origin = cam.CFrame.Position
-    local res = workspace:Raycast(origin, targetPart.Position - origin, rayParams)
-    return res == nil or res.Instance:IsDescendantOf(char)
+    local result = workspace:Raycast(origin, part.Position - origin, rayParams)
+    return not result or result.Instance:IsDescendantOf(character)
 end
 
-local function w2s(pos)
-    local v = cam:WorldToViewportPoint(pos)
-    return Vector2.new(v.X, v.Y), v.Z > 0
+local function project(position)
+    local point, onScreen = cam:WorldToViewportPoint(position)
+    return Vector2.new(point.X, point.Y), point.Z > 0, onScreen
 end
 
-local cosLimit = math.cos(math.rad(Config.WarnAngleDeg))
-local warnRay = RaycastParams.new()
-warnRay.FilterType = Enum.RaycastFilterType.Exclude
-warnRay.IgnoreWater = true
-
-local function scan(myChar, myRoot)
+local function scan(myCharacter, myRoot)
+    if not myRoot then
+        return 0, false
+    end
     local count, aiming = 0, false
-    if not myRoot then return 0, false end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= lp then
-            local char = plr.Character
-            local head = char and char:FindFirstChild("Head")
-            local hum  = char and char:FindFirstChildOfClass("Humanoid")
-            local skip = not head or not hum or hum.Health <= 0
-                or (Config.TeamCheck and plr.Team ~= nil and plr.Team == lp.Team)
-            if not skip then
-                local toMe = myRoot.Position - head.Position
-                local dist = toMe.Magnitude
-                if dist <= Config.CountRadius then count += 1 end
-                if not aiming and dist <= Config.WarnMaxDist and dist > 0.1
-                    and head.CFrame.LookVector:Dot(toMe / dist) >= cosLimit then
+    local cosLimit = math.cos(math.rad(Config.WarnAngleDeg))
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= lp and not sameTeam(player) then
+            local character = player.Character
+            local head = character and character:FindFirstChild("Head")
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            if head and humanoid and humanoid.Health > 0 then
+                local delta = myRoot.Position - head.Position
+                local distance = delta.Magnitude
+                if distance <= Config.CountRadius then
+                    count += 1
+                end
+                if not aiming and distance > 0.1
+                    and distance <= Config.WarnMaxDist
+                    and head.CFrame.LookVector:Dot(delta.Unit) >= cosLimit
+                then
                     if not Config.WarnNeedLOS then
                         aiming = true
                     else
-                        warnRay.FilterDescendantsInstances = { char }
-                        local hit = workspace:Raycast(head.Position, toMe, warnRay)
-                        if hit == nil or hit.Instance:IsDescendantOf(myChar) then aiming = true end
+                        warningRay.FilterDescendantsInstances = { character }
+                        local hit = workspace:Raycast(head.Position, delta, warningRay)
+                        aiming = not hit or (
+                            myCharacter ~= nil
+                            and hit.Instance:IsDescendantOf(myCharacter)
+                        )
                     end
                 end
             end
@@ -1197,328 +1789,386 @@ local function scan(myChar, myRoot)
     return count, aiming
 end
 
----------------------------------------------------------------- character mods
-local saved, lastHum, transSaved = {}, nil, {}
+---------------------------------------------------------------- CHARACTER MODIFICATIONS
 
-local function charTick()
-    local char = lp.Character
-    local hum  = char and char:FindFirstChildOfClass("Humanoid")
-    if hum ~= lastHum then saved, transSaved, lastHum = {}, {}, hum end
-    if not hum then return end
-
-    if Config.SpeedOn then
-        if Config.SpeedBypass then
-            hum.WalkSpeed = 16
-        else
-            if saved.speed == nil then saved.speed = hum.WalkSpeed end
-            hum.WalkSpeed = Config.Speed
-        end
-    elseif saved.speed ~= nil then
-        hum.WalkSpeed = saved.speed saved.speed = nil
+local function saveProperty(object, property, value)
+    local bucket = savedProperties[object]
+    if not bucket then
+        bucket = {}
+        savedProperties[object] = bucket
     end
+    if bucket[property] == nil then
+        bucket[property] = object[property]
+    end
+    object[property] = value
+end
 
-    if Config.JumpOn then
-        if saved.jump == nil then saved.jump = { hum.UseJumpPower, hum.JumpPower } end
-        hum.UseJumpPower = true
-        hum.JumpPower = Config.Jump
-    elseif saved.jump ~= nil then
-        hum.UseJumpPower, hum.JumpPower = saved.jump[1], saved.jump[2] saved.jump = nil
+local function restoreProperty(object, property)
+    local bucket = savedProperties[object]
+    if bucket and bucket[property] ~= nil then
+        local previous = bucket[property]
+        bucket[property] = nil
+        pcall(function()
+            object[property] = previous
+        end)
+        if next(bucket) == nil then
+            savedProperties[object] = nil
+        end
+    end
+end
+
+local function characterTick()
+    local character = lp.Character
+    if character ~= lastCharacter then
+        restoreAllProperties()
+        lastCharacter = character
     end
 
     if Config.GravOn then
-        if saved.grav == nil then saved.grav = workspace.Gravity end
+        if originalGravity == nil then
+            originalGravity = workspace.Gravity
+        end
         workspace.Gravity = Config.Grav
-    elseif saved.grav ~= nil then
-        workspace.Gravity = saved.grav saved.grav = nil
+    elseif originalGravity ~= nil then
+        workspace.Gravity = originalGravity
+        originalGravity = nil
     end
 
-    local head = char:FindFirstChild("Head")
-    local hs = hum:FindFirstChild("HeadScale")
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        return
+    end
+
+    if Config.SpeedOn then
+        saveProperty(humanoid, "WalkSpeed", Config.Speed)
+    else
+        restoreProperty(humanoid, "WalkSpeed")
+    end
+
+    if Config.JumpOn then
+        saveProperty(humanoid, "UseJumpPower", true)
+        saveProperty(humanoid, "JumpPower", Config.Jump)
+    else
+        restoreProperty(humanoid, "JumpPower")
+        restoreProperty(humanoid, "UseJumpPower")
+    end
+
+    local head = character:FindFirstChild("Head")
+    local headScale = humanoid:FindFirstChild("HeadScale")
     if Config.HeadOn and head then
-        if hs then
-            if saved.head == nil then saved.head = hs.Value end
-            hs.Value = Config.Head
+        if headScale then
+            restoreProperty(head, "Size")
+            saveProperty(headScale, "Value", Config.Head)
         else
-            if saved.head == nil then saved.head = head.Size end
-            head.Size = saved.head * Config.Head
+            local bucket = savedProperties[head]
+            local original = bucket and bucket.Size or head.Size
+            saveProperty(head, "Size", original * Config.Head)
         end
-    elseif saved.head ~= nil then
-        if hs then hs.Value = saved.head elseif head then head.Size = saved.head end
-        saved.head = nil
+    else
+        if headScale then
+            restoreProperty(headScale, "Value")
+        end
+        if head then
+            restoreProperty(head, "Size")
+        end
     end
 
     if Config.TransOn then
-        for _, d in ipairs(char:GetDescendants()) do
-            if (d:IsA("BasePart") and d.Name ~= "HumanoidRootPart") or d:IsA("Decal") then
-                if transSaved[d] == nil then transSaved[d] = d.Transparency end
-                d.Transparency = Config.Trans
+        for _, object in ipairs(character:GetDescendants()) do
+            if (object:IsA("BasePart") and object.Name ~= "HumanoidRootPart")
+                or object:IsA("Decal")
+            then
+                if changedTransparency[object] == nil then
+                    changedTransparency[object] = object.Transparency
+                end
+                object.Transparency = Config.Trans
             end
         end
-    elseif next(transSaved) then
-        for d, t in pairs(transSaved) do
-            if d.Parent then d.Transparency = t end
+    else
+        for object, value in pairs(changedTransparency) do
+            pcall(function()
+                object.Transparency = value
+            end)
         end
-        transSaved = {}
+        changedTransparency = {}
     end
 end
 
-local charTimer = 0
-local charConn = RunService.Heartbeat:Connect(function(dt)
-    charTimer += dt
-    if charTimer >= 0.1 then
-        charTimer = 0
-        charTick()
+local characterTimer = 0
+connect(RunService.Heartbeat, function(dt)
+    if not alive then
+        return
     end
-    
-    -- Speed bypass translation handler
-    if Config.SpeedOn and Config.SpeedBypass then
-        local char = lp.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hum and hrp and hum.MoveDirection.Magnitude > 0 then
-            hrp.CFrame = hrp.CFrame + (hum.MoveDirection * (Config.Speed - 16) * dt)
-        end
+
+    characterTimer += dt
+    if characterTimer >= 0.1 then
+        characterTimer = 0
+        characterTick()
+    end
+
+    Snap.timer += dt
+    if Snap.timer >= math.max(Config.SnapCheckInterval, 0.5) then
+        Snap.timer = 0
+        queueSnapRefresh()
     end
 end)
 
----------------------------------------------------------------- main loop
-local fps, fpsTimer = 60, 0
+---------------------------------------------------------------- MAIN LOOP
 
-local renderConn
-renderConn = RunService.RenderStepped:Connect(function(dt)
-    cam = workspace.CurrentCamera
-    local myChar = lp.Character
-    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    rayParams.FilterDescendantsInstances = { myChar }
+local fps, fpsTimer, scanTimer = 60, 0, 0
+local cachedCount, cachedAiming = 0, false
 
-    -- FOV Circle update (Locked to center of screen)
-    local screenCenter = cam.ViewportSize / 2
-    fovCircle.Visible = Config.AimEnabled and window.Visible
-    fovCircle.Radius = Config.AimFov
-    fovCircle.Position = screenCenter
+RunService:BindToRenderStep(
+    renderName,
+    Enum.RenderPriority.Camera.Value + 1,
+    function(dt)
+        if not alive then
+            return
+        end
 
-    -- Auto-Aim logic with prediction & visibility check (Centered FOV targeting)
-    if Config.AimEnabled and myRoot then
-        local bestTargetPart = nil
-        local minDisc = Config.AimFov
+        cam = workspace.CurrentCamera
+        if not cam then
+            fovCircle.Visible = false
+            warning.Visible = false
+            countPill.Visible = false
+            fpsPill.Visible = false
+            for _, object in pairs(tracked) do
+                hideESP(object)
+            end
+            return
+        end
 
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= lp and (not Config.TeamCheck or plr.Team ~= lp.Team) then
-                local char = plr.Character
-                local head = char and char:FindFirstChild("Head")
-                local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-                local hum  = char and char:FindFirstChildOfClass("Humanoid")
-                if head and hrp and hum and hum.Health > 0 then
-                    local dist = (hrp.Position - myRoot.Position).Magnitude
-                    if dist <= Config.AimDist then
-                        local targetPos = head.Position
-                        if Config.PredictionOn and hrp then
-                            targetPos = targetPos + (hrp.AssemblyLinearVelocity * Config.PredictionVal)
+        local myCharacter = lp.Character
+        local myRoot = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
+        rayParams.FilterDescendantsInstances = myCharacter and { myCharacter } or {}
+
+        local center = cam.ViewportSize / 2
+        fovCircle.Position = center
+        fovCircle.Radius = Config.AimFov
+        fovCircle.Visible = Config.AimEnabled and Config.ShowFov
+
+        if Config.AimEnabled and myRoot then
+            local bestPosition
+            local bestDistance = Config.AimFov
+
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= lp and not sameTeam(player) then
+                    local character = player.Character
+                    local head = character and character:FindFirstChild("Head")
+                    local root = character and character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                    if head and root and humanoid and humanoid.Health > 0
+                        and (root.Position - myRoot.Position).Magnitude <= Config.AimDist
+                        and (not Config.VisCheck or visible(character, head))
+                    then
+                        local position = head.Position
+                        if Config.PredictionOn then
+                            position += root.AssemblyLinearVelocity * Config.PredictionVal
                         end
-
-                        local visible = true
-                        if Config.VisCheck then
-                            visible = isVisible(char, head)
-                        end
-                        if visible then
-                            local screenPos, onScreen = w2s(targetPos)
-                            if onScreen then
-                                local disc = (screenPos - screenCenter).Magnitude
-                                if disc < minDisc then
-                                    minDisc = disc
-                                    bestTargetPart = { Part = head, Pos = targetPos }
-                                end
-                            end
+                        local screen, inFront, onScreen = project(position)
+                        local distance = (screen - center).Magnitude
+                        if inFront and onScreen and distance < bestDistance then
+                            bestDistance = distance
+                            bestPosition = position
                         end
                     end
                 end
             end
-        end
 
-        if bestTargetPart then
-            local alpha = math.clamp(dt * (22 - Config.AimSmooth), 0.1, 1)
-            if Config.AimSmooth <= 1 then alpha = 1 end
+            if bestPosition then
+                local alpha = Config.AimSmooth <= 1 and 1
+                    or (1 - math.exp(-(22 - Config.AimSmooth) * dt))
 
-            if Config.CamLock then
-                local targetCF = CFrame.lookAt(cam.CFrame.Position, bestTargetPart.Pos)
-                cam.CFrame = cam.CFrame:Lerp(targetCF, alpha)
-            end
-            if Config.CharLock then
-                local lookCF = CFrame.new(myRoot.Position, Vector3.new(bestTargetPart.Pos.X, myRoot.Position.Y, bestTargetPart.Pos.Z))
-                myRoot.CFrame = myRoot.CFrame:Lerp(lookCF, alpha)
-            end
-            if Config.SilentAim then
-                myRoot.CFrame = CFrame.new(bestTargetPart.Pos - Vector3.new(0, 3, 0))
-            end
-        end
-    end
-
-    local anyText = Config.Name or Config.Item or Config.Dist
-    local needVis = Config.Bones or Config.RootDot
-    local anything = Config.Box or Config.Health or anyText or needVis
-
-    for plr, o in pairs(tracked) do
-        local char = plr.Character
-        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
-        local hum  = char and char:FindFirstChildOfClass("Humanoid")
-
-        local ok = Config.Enabled and anything and myRoot and hrp and hum and hum.Health > 0
-        if ok and Config.TeamCheck and plr.Team ~= nil and plr.Team == lp.Team then ok = false end
-
-        local dist = 0
-        if ok then
-            dist = (hrp.Position - myRoot.Position).Magnitude
-            if dist > Config.MaxDistance then ok = false end
-        end
-
-        local cf, size = CFrame.new(), Vector3.new(4, 5, 2)
-        local hasBox = pcall(function()
-            return char:GetBoundingBox()
-        end)
-        if ok and hasBox then
-            cf, size = char:GetBoundingBox()
-        elseif hrp then
-            cf = hrp.CFrame
-        else
-            ok = false
-        end
-
-        local topPos = (cf + Vector3.new(0, size.Y / 2, 0)).Position
-        local botPos = (cf - Vector3.new(0, size.Y / 2, 0)).Position
-
-        local top, topOn = w2s(topPos)
-        local bot, botOn = w2s(botPos)
-        if ok and not (topOn and botOn) then ok = false end
-
-        if not ok then
-            hide(o)
-        else
-            local h = math.abs(bot.Y - top.Y)
-            local w = h * 0.6
-            local x = (top.X + bot.X) / 2 - w / 2
-            local y = top.Y
-
-            if Config.Box then
-                local cx, cy = w * 0.3, h * 0.15
-                local segs = {
-                    {Vector2.new(x, y),         Vector2.new(x + cx, y)},
-                    {Vector2.new(x, y),         Vector2.new(x, y + cy)},
-                    {Vector2.new(x + w, y),     Vector2.new(x + w - cx, y)},
-                    {Vector2.new(x + w, y),     Vector2.new(x + w, y + cy)},
-                    {Vector2.new(x, y + h),     Vector2.new(x + cx, y + h)},
-                    {Vector2.new(x, y + h),     Vector2.new(x, y + h - cy)},
-                    {Vector2.new(x + w, y + h), Vector2.new(x + w - cx, y + h)},
-                    {Vector2.new(x + w, y + h), Vector2.new(x + w, y + h - cy)},
-                }
-                for i = 1, 8 do
-                    local l = o.corners[i]
-                    l.From, l.To, l.Color, l.Visible = segs[i][1], segs[i][2], Config.BoxColor, true
+                if Config.CamLock
+                    and (bestPosition - cam.CFrame.Position).Magnitude > 0.001
+                then
+                    cam.CFrame = cam.CFrame:Lerp(
+                        CFrame.lookAt(cam.CFrame.Position, bestPosition), alpha
+                    )
                 end
+                if Config.CharLock then
+                    local horizontal = Vector3.new(
+                        bestPosition.X, myRoot.Position.Y, bestPosition.Z
+                    )
+                    if (horizontal - myRoot.Position).Magnitude > 0.001 then
+                        myRoot.CFrame = myRoot.CFrame:Lerp(
+                            CFrame.lookAt(myRoot.Position, horizontal), alpha
+                        )
+                    end
+                end
+                if Config.SilentAim then
+                    myRoot.CFrame = CFrame.new(bestPosition - Vector3.new(0, 3, 0))
+                end
+            end
+        end
+
+        local anyText = Config.Name or Config.Item or Config.Dist
+        local needVisibility = Config.Bones or Config.RootDot
+        local anything = Config.Box or Config.Health or anyText or needVisibility
+
+        for player, object in pairs(tracked) do
+            local character = player.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            local valid = Config.Enabled and anything and myRoot and root
+                and humanoid and humanoid.Health > 0 and not sameTeam(player)
+            local distance = valid and (root.Position - myRoot.Position).Magnitude or 0
+            if valid and distance > Config.MaxDistance then
+                valid = false
+            end
+
+            if not valid then
+                hideESP(object)
             else
-                for _, l in ipairs(o.corners) do l.Visible = false end
-            end
+                local cf, size = root.CFrame, Vector3.new(4, 5, 2)
+                local ok, boxCF, boxSize = pcall(character.GetBoundingBox, character)
+                if ok then
+                    cf, size = boxCF, boxSize
+                end
+                local top, topFront = project(
+                    cf.Position + Vector3.new(0, size.Y / 2, 0)
+                )
+                local bottom, bottomFront = project(
+                    cf.Position - Vector3.new(0, size.Y / 2, 0)
+                )
 
-            if Config.Health then
-                local ratio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
-                local bx = x - 5
-                o.hpBack.From, o.hpBack.To, o.hpBack.Visible = Vector2.new(bx, y + h + 1), Vector2.new(bx, y - 1), true
-                o.hpBar.From  = Vector2.new(bx, y + h)
-                o.hpBar.To    = Vector2.new(bx, y + h - h * ratio)
-                o.hpBar.Color = Color3.fromRGB(255, 0, 0):Lerp(Color3.fromRGB(0, 255, 0), ratio)
-                o.hpBar.Visible = true
-            else
-                o.hpBack.Visible, o.hpBar.Visible = false, false
-            end
+                if not topFront or not bottomFront then
+                    hideESP(object)
+                else
+                    local height = math.abs(bottom.Y - top.Y)
+                    local width = height * 0.6
+                    local x = (top.X + bottom.X) / 2 - width / 2
+                    local y = math.min(top.Y, bottom.Y)
 
-            o.name.Visible, o.item.Visible, o.dist.Visible = Config.Name, Config.Item, Config.Dist
-            if anyText then
-                local tool = char:FindFirstChildOfClass("Tool")
-                o.name.Text = plr.DisplayName
-                o.item.Text = tool and tool.Name or "Nothing"
-                o.dist.Text = ("%d studs"):format(math.floor(dist))
-                o.holder.Position = UDim2.fromOffset(x + w / 2, y + h + 2)
-            end
-            o.holder.Visible = anyText
-
-            local col = Config.HiddenColor
-            local headPart = char:FindFirstChild("Head") or hrp
-            if needVis and headPart then
-                col = isVisible(char, headPart) and Config.VisColor or Config.HiddenColor
-            end
-
-            if Config.RootDot and hrp then
-                o.dot.Position, o.dot.Color, o.dot.Visible = w2s(hrp.Position), col, true
-            else
-                o.dot.Visible = false
-            end
-
-            if Config.Bones then
-                local map = char:FindFirstChild("UpperTorso") and R15 or R6
-                for i, l in ipairs(o.bones) do
-                    local pair = map[i]
-                    local a = pair and char:FindFirstChild(pair[1])
-                    local b = pair and char:FindFirstChild(pair[2])
-                    if a and b then
-                        local pa, oa = w2s(a.Position)
-                        local pb, ob = w2s(b.Position)
-                        if oa and ob then
-                            l.From, l.To, l.Color, l.Visible = pa, pb, col, true
-                        else
-                            l.Visible = false
+                    if Config.Box then
+                        local dx, dy = width * 0.3, height * 0.15
+                        local segments = {
+                            { x, y, x + dx, y },
+                            { x, y, x, y + dy },
+                            { x + width, y, x + width - dx, y },
+                            { x + width, y, x + width, y + dy },
+                            { x, y + height, x + dx, y + height },
+                            { x, y + height, x, y + height - dy },
+                            { x + width, y + height, x + width - dx, y + height },
+                            { x + width, y + height, x + width, y + height - dy },
+                        }
+                        for i, segment in ipairs(segments) do
+                            local line = object.corners[i]
+                            line.From = Vector2.new(segment[1], segment[2])
+                            line.To = Vector2.new(segment[3], segment[4])
+                            line.Color = Config.BoxColor
+                            line.Visible = true
                         end
                     else
-                        l.Visible = false
+                        for _, line in ipairs(object.corners) do
+                            line.Visible = false
+                        end
+                    end
+
+                    if Config.Health then
+                        local ratio = math.clamp(
+                            humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1
+                        )
+                        local barX = x - 5
+                        object.hpBack.From = Vector2.new(barX, y + height + 1)
+                        object.hpBack.To = Vector2.new(barX, y - 1)
+                        object.hpBar.From = Vector2.new(barX, y + height)
+                        object.hpBar.To = Vector2.new(barX, y + height * (1 - ratio))
+                        object.hpBar.Color = Color3.new(1 - ratio, ratio, 0)
+                    end
+                    object.hpBack.Visible = Config.Health
+                    object.hpBar.Visible = Config.Health
+                    object.name.Visible = Config.Name
+                    object.item.Visible = Config.Item
+                    object.dist.Visible = Config.Dist
+                    object.holder.Visible = anyText
+
+                    if anyText then
+                        local tool = character:FindFirstChildOfClass("Tool")
+                        object.name.Text = player.DisplayName
+                        object.item.Text = tool and tool.Name or "Nothing"
+                        object.dist.Text = ("%d studs"):format(math.floor(distance))
+                        object.holder.Position = UDim2.fromOffset(
+                            x + width / 2, y + height + 2
+                        )
+                    end
+
+                    local color = Config.HiddenColor
+                    if needVisibility then
+                        color = visible(
+                            character, character:FindFirstChild("Head") or root
+                        ) and Config.VisColor or Config.HiddenColor
+                    end
+                    object.dot.Visible = Config.RootDot
+                    if Config.RootDot then
+                        local position = project(root.Position)
+                        object.dot.Position = position
+                        object.dot.Color = color
+                    end
+
+                    local map = character:FindFirstChild("UpperTorso") and R15 or R6
+                    for i, line in ipairs(object.bones) do
+                        local pair = Config.Bones and map[i]
+                        local a = pair and character:FindFirstChild(pair[1])
+                        local b = pair and character:FindFirstChild(pair[2])
+                        if a and b then
+                            local pa, fa = project(a.Position)
+                            local pb, fb = project(b.Position)
+                            line.Visible = fa and fb
+                            if fa and fb then
+                                line.From = pa
+                                line.To = pb
+                                line.Color = color
+                            end
+                        else
+                            line.Visible = false
+                        end
                     end
                 end
-            else
-                for _, l in ipairs(o.bones) do l.Visible = false end
+            end
+        end
+
+        scanTimer += dt
+        if (Config.Warn or Config.Counter) and scanTimer >= 0.1 then
+            scanTimer = 0
+            cachedCount, cachedAiming = scan(myCharacter, myRoot)
+        elseif not Config.Warn and not Config.Counter then
+            scanTimer = 0
+            cachedCount, cachedAiming = 0, false
+        end
+
+        warning.Visible = Config.Warn and cachedAiming and myRoot ~= nil
+        if warning.Visible then
+            warning.TextColor3 = math.floor(os.clock() / Config.WarnFlip) % 2 == 0
+                and Config.WarnColorA or Config.WarnColorB
+        end
+
+        countPill.Visible = Config.Counter
+        if Config.Counter then
+            countText.Text = ("Total enemy around you: %d"):format(
+                myRoot and cachedCount or 0
+            )
+        end
+
+        fpsPill.Visible = Config.Fps
+        if Config.Fps then
+            fps += ((1 / math.max(dt, 0.0001)) - fps) * 0.1
+            fpsTimer += dt
+            if fpsTimer >= 0.25 then
+                fpsTimer = 0
+                fpsText.Text = ("%d FPS"):format(math.floor(fps + 0.5))
             end
         end
     end
+)
 
-    local count, aiming = 0, false
-    if Config.Warn or Config.Counter then count, aiming = scan(myChar, myRoot) end
-
-    if Config.Warn and aiming then
-        warnLabel.TextColor3 = (math.floor(os.clock() / Config.WarnFlip) % 2 == 0)
-            and Config.WarnColorA or Config.WarnColorB
-        warnLabel.Visible = true
-    else
-        warnLabel.Visible = false
-    end
-
-    countPill.Visible = Config.Counter
-    if Config.Counter then countText.Text = ("Total enemy around you: %d"):format(count) end
-
-    fpsPill.Visible = Config.Fps
-    if Config.Fps then
-        fps = fps + ((1 / math.max(dt, 1e-4)) - fps) * 0.1
-        fpsTimer += dt
-        if fpsTimer >= 0.25 then
-            fpsTimer = 0
-            fpsText.Text = ("%d FPS"):format(math.floor(fps + 0.5))
-        end
-    end
-end)
-
----------------------------------------------------------------- keys / unload
-local inputConn
-local function unload()
-    Config.SpeedOn, Config.JumpOn, Config.GravOn, Config.HeadOn, Config.TransOn = false, false, false, false, false
-    charTick()
-    renderConn:Disconnect() charConn:Disconnect() inputConn:Disconnect()
-    fovCircle:Remove()
-    for _, c in ipairs(conns) do c:Disconnect() end
-    for plr in pairs(tracked) do untrack(plr) end
-    gui:Destroy()
-end
-
-unloadBtn.Activated:Connect(unload)
-inputConn = UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == Config.MenuKey then
-        window.Visible = not window.Visible
-    elseif input.KeyCode == Config.ExitKey then
+connect(UserInputService.InputBegan, function(input, processed)
+    if not processed and input.KeyCode == Config.ExitKey then
         unload()
     end
 end)
+
+notify(
+    "haxbey engine",
+    "Initialized. Enter your remote names under Character > Remote search."
+)
