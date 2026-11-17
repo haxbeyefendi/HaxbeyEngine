@@ -1,2174 +1,2951 @@
--- Made by ByHAXBEY(Furkan): https://t.me/zxroorj
--- haxbey engine | Rayfield UI
--- Not run or tested.
---
--- Remote search:
---   Searches the entire client-visible game instance tree.
---   Does not read server-only files, ServerStorage contents, or server scripts.
---   Type comma-separated or newline-separated remote names in Character.
---   Exact matching is the default. All matching instances are targeted.
---   Optional full paths can be entered instead of names.
---   Newly replicated remotes are indexed automatically.
---
--- BlockSnap:
---   Outgoing: drops FireServer / InvokeServer calls to matched remotes.
---   Incoming: disables accessible OnClientEvent listeners on matched events.
---   Refreshes matching/listeners every 1.5 seconds.
---   Changing the search restores listeners on remotes no longer matched.
---   Off/unload restores owned listeners and attempts hook removal.
---
--- This does not identify what a remote actually does.
--- Blocking a name does not guarantee it controls rubberbanding.
--- Direct server position replication is unaffected.
--- Server-side movement checks are unaffected.
--- Executor hook/listener support varies.
--- No remote spy is embedded.
--- Catalog/store endpoint parameters remain unverified.
+local Loadtime = tick()
+local Repository = "https://raw.githubusercontent.com/RectangularObject/LinoriaLib/main/"
 
-local Config = {
-    Enabled = false,
-    TeamCheck = false,
-    Box = false,
-    Health = false,
-    Name = false,
-    Item = false,
-    Dist = false,
-    Bones = false,
-    RootDot = false,
-    Warn = false,
-    Counter = false,
-    Fps = false,
+local Library = loadstring(game:HttpGet(Repository .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(Repository .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(Repository .. "addons/SaveManager.lua"))()
 
-    SpeedOn = false,
-    Speed = 16,
+local ErrorMessageOut
+ErrorMessageOut = game:GetService("LogService").MessageOut:Connect(function(Message, Type)
 
-    BlockSnap = false,
-    SnapRemoteNames = "", -- FILL: or type names in Character > Remote search
-    SnapExactMatch = true,
-    SnapIgnoreCase = true,
-    SnapBlockOutgoing = true,
-    SnapBlockIncoming = true,
-    SnapCheckInterval = 1.5,
+    if Type == Enum.MessageType.MessageError and not string.find(Message, "attempt to index nil with 'Value'") then
+        ErrorMessageOut:Disconnect()
 
-    JumpOn = false,
-    Jump = 50,
-    GravOn = false,
-    Grav = 196,
-    HeadOn = false,
-    Head = 1,
-    TransOn = false,
-    Trans = 0,
+        setclipboard("Executor: " .. identifyexecutor() .. "\n\n" .. tostring(Message))
+        Library:Notify(" Lolhax has errored while loading and will now unload. The error has been copied to your clipboard, please report this on the LX discord server! ", 4.5)
 
-    AimEnabled = false,
-    ShowFov = false,
-    SilentAim = false,
-    CharLock = false,
-    CamLock = false,
-    VisCheck = false,
-    PredictionOn = false,
-    PredictionVal = 0.1,
-    AimFov = 150,
-    AimDist = 500,
-    AimSmooth = 1,
-
-    MaxDistance = 2000,
-    CountRadius = 500,
-    TextSize = 13,
-    BoxColor = Color3.fromRGB(255, 50, 50),
-    NameColor = Color3.fromRGB(204, 170, 0),
-    ItemColor = Color3.fromRGB(0, 60, 200),
-    DistColor = Color3.new(1, 1, 1),
-    VisColor = Color3.fromRGB(0, 255, 0),
-    HiddenColor = Color3.fromRGB(255, 0, 0),
-
-    WarnAngleDeg = 8,
-    WarnMaxDist = 500,
-    WarnNeedLOS = true,
-    WarnY = 0.05,
-    WarnTextSize = 30,
-    WarnFlip = 0.8,
-    WarnColorA = Color3.fromRGB(255, 220, 0),
-    WarnColorB = Color3.fromRGB(255, 0, 0),
-    WarnText = "ENEMY IS AIMING AT YOU",
-    HudY = 0.12,
-    HudTextSize = 18,
-
-    MenuTitle = "haxbey engine",
-    TitleIcon = "", -- FILL: optional unicode
-    RobuxIcon = "R$", -- FILL: optional unicode
-    KickMessage = "left via haxbey engine",
-    OpenImage = "rbxassetid://138765108919147",
-    OpenWidth = 120,
-    MenuKey = Enum.KeyCode.RightShift,
-    ExitKey = Enum.KeyCode.End,
-
-    HttpGap = 1.2,
-    HttpRetries = 4,
-    RayfieldUrl = "https://sirius.menu/rayfield",
-}
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
-local MarketplaceService = game:GetService("MarketplaceService")
-local CoreGui = game:GetService("CoreGui")
-
-local lp = Players.LocalPlayer
-local env = (getgenv and getgenv()) or _G
-local httpRequest = request or http_request
-    or (syn and syn.request)
-    or (http and http.request)
-local clipboard = setclipboard or toclipboard
-
-if type(env.HaxbeyEngineUnload) == "function" then
-    pcall(env.HaxbeyEngineUnload)
-end
-
-assert(Drawing and Drawing.new, "haxbey engine requires Drawing.new")
-assert(loadstring, "haxbey engine requires loadstring")
-
-local RedTheme = {
-    TextColor = Color3.fromRGB(240, 240, 240),
-    Background = Color3.fromRGB(15, 15, 18),
-    Topbar = Color3.fromRGB(30, 17, 20),
-    Shadow = Color3.fromRGB(8, 8, 10),
-    NotificationBackground = Color3.fromRGB(22, 22, 25),
-    NotificationActionsBackground = Color3.fromRGB(45, 30, 35),
-    TabBackground = Color3.fromRGB(35, 35, 40),
-    TabStroke = Color3.fromRGB(55, 55, 60),
-    TabBackgroundSelected = Color3.fromRGB(180, 40, 45),
-    TabTextColor = Color3.fromRGB(220, 220, 220),
-    SelectedTabTextColor = Color3.new(1, 1, 1),
-    ElementBackground = Color3.fromRGB(27, 27, 31),
-    ElementBackgroundHover = Color3.fromRGB(35, 35, 40),
-    SecondaryElementBackground = Color3.fromRGB(23, 23, 27),
-    ElementStroke = Color3.fromRGB(55, 55, 60),
-    SecondaryElementStroke = Color3.fromRGB(45, 45, 50),
-    SliderBackground = Color3.fromRGB(105, 30, 35),
-    SliderProgress = Color3.fromRGB(205, 45, 50),
-    SliderStroke = Color3.fromRGB(230, 65, 70),
-    ToggleBackground = Color3.fromRGB(30, 30, 35),
-    ToggleEnabled = Color3.fromRGB(205, 45, 50),
-    ToggleDisabled = Color3.fromRGB(80, 80, 85),
-    ToggleEnabledStroke = Color3.fromRGB(230, 65, 70),
-    ToggleDisabledStroke = Color3.fromRGB(100, 100, 105),
-    ToggleEnabledOuterStroke = Color3.fromRGB(80, 25, 30),
-    ToggleDisabledOuterStroke = Color3.fromRGB(50, 50, 55),
-    DropdownSelected = Color3.fromRGB(55, 25, 30),
-    DropdownUnselected = Color3.fromRGB(30, 30, 35),
-    InputBackground = Color3.fromRGB(25, 25, 30),
-    InputStroke = Color3.fromRGB(65, 65, 70),
-    PlaceholderColor = Color3.fromRGB(150, 150, 155),
-}
-
-local Rayfield = loadstring(game:HttpGet(Config.RayfieldUrl))()
-
-local alive = true
-local connections, drawings, tracked, toggles = {}, {}, {}, {}
-local browserStates = {}
-local savedProperties, changedTransparency = {}, {}
-local originalGravity, lastCharacter, overlay
-local cam = workspace.CurrentCamera
-local renderName = "haxbey_engine_main"
-
-local Snap = {
-    registry = {},
-    matches = {},
-    disabled = {},
-    terms = {},
-    hookInstalled = false,
-    previousNamecall = nil,
-    hook = nil,
-    hookError = nil,
-    timer = 0,
-    outgoingBlocked = 0,
-    paragraph = nil,
-    results = nil,
-    selectedPath = nil,
-    lastOptions = "",
-    lastStatus = "",
-    refreshQueued = false,
-}
-
-local function connect(signal, callback)
-    local connection = signal:Connect(callback)
-    connections[#connections + 1] = connection
-    return connection
-end
-
-local function instance(class, properties, parent)
-    local object = Instance.new(class)
-    for key, value in pairs(properties) do
-        object[key] = value
-    end
-    object.Parent = parent
-    return object
-end
-
-local function draw(class, properties)
-    local object = Drawing.new(class)
-    drawings[object] = true
-    for key, value in pairs(properties) do
-        object[key] = value
-    end
-    return object
-end
-
-local function removeDrawing(object)
-    if drawings[object] then
-        drawings[object] = nil
-        pcall(function()
-            object:Remove()
+        task.delay(5, function()
+            Library:Unload()
         end)
     end
-end
 
-local function notify(title, content)
-    if alive then
-        pcall(function()
-            Rayfield:Notify({
-                Title = title,
-                Content = content,
-                Duration = 5,
-            })
-        end)
-    end
-end
-
-local function firstOption(value)
-    if type(value) == "table" then
-        return value[1]
-    end
-    return value
-end
-
-local function copy(text)
-    if not clipboard then
-        notify("Clipboard unavailable", tostring(text))
-        return false
-    end
-    local ok, err = pcall(clipboard, tostring(text))
-    if not ok then
-        notify("Clipboard error", tostring(err))
-    end
-    return ok
-end
-
-local function restoreAllProperties()
-    for object, properties in pairs(savedProperties) do
-        for property, value in pairs(properties) do
-            pcall(function()
-                object[property] = value
-            end)
+end)
+local friends = {}
+local LocalPlayer = game.Players.LocalPlayer
+local epiklistofpeople = {}
+local LXUser = {}
+local SendChat = game:GetService("TextChatService"):WaitForChild("TextChannels"):WaitForChild("RBXGeneral")
+-- detection thingy
+SendChat:SendAsync("", "Ineedtheepikrespond")
+local Detection = game:GetService("TextChatService").MessageReceived:Connect(function(yeah)
+    if yeah.Metadata == "usinglolhax" then
+        if game:GetService("Players")[yeah.TextSource.Name] ~= LocalPlayer.Name then
+            game:GetService("Players")[yeah.TextSource.Name]:SetAttribute("USINGLOLHAX", true)
+        end
+    elseif yeah.Metadata == "Ineedtheepikrespond" then
+        if game:GetService("Players")[yeah.TextSource.Name] ~= LocalPlayer.Name then
+            SendChat:SendAsync("", "usinglolhax")
+            game:GetService("Players")[yeah.TextSource.Name]:SetAttribute("USINGLOLHAX", true)
         end
     end
-    savedProperties = {}
+end)
+-- UI vvv
 
-    for object, value in pairs(changedTransparency) do
-        pcall(function()
-            object.Transparency = value
-        end)
-    end
-    changedTransparency = {}
+local Window = Library:CreateWindow({ Title = " LOLHAX ┃ ".. LocalPlayer.Name, Center = true, AutoShow = true, TabPadding = 3, MenuFadeTime = 0.15 })
+local Tabs = { General = Window:AddTab("General"), Exploit = Window:AddTab("Exploits"), ESP = Window:AddTab("ESP"), Visuals = Window:AddTab("Visuals"), Misc = Window:AddTab("Miscellaneous"), Config = Window:AddTab("Config") }
 
-    if originalGravity ~= nil then
-        pcall(function()
-            workspace.Gravity = originalGravity
-        end)
-        originalGravity = nil
-    end
-end
+local GeneralAutomation = Tabs.General:AddLeftGroupbox("Automation")
+GeneralAutomation:AddToggle("GA_AutoInteract", { Text = "Automatic Interact", Default = false, }):AddKeyPicker("GA_AutoInteract_K", { Default = "R", SyncToggleState = false, Mode = "Hold", Text = "Auto Interact", NoUI = false, Tooltip = "Will activate any nearby interactables when key is active." })
+GeneralAutomation:AddDropdown("GA_AutoInteract_Options", { Values = { "Use Lockpick ( Doors )", "Use Lockpick ( Other )", "Ignore Light Sources", "Ignore Can-Die" }, Default = 0, Multi = true, Text = "Automatic Interact Options" })
+GeneralAutomation:AddSlider("GA_AutoInteract_Range", { Text = "Range Multiplier", Default = 1, Min = 1, Max = 2, Rounding = 1, Compact = false })
+GeneralAutomation:AddDivider()
+GeneralAutomation:AddToggle("GA_EatCandies", { Text = "Automatic Candy Use", Default = false, }):AddKeyPicker("GA_EatCandies_K", { Default = "V", SyncToggleState = false, Mode = "Hold", Text = "Auto Use Candy", NoUI = false, Tooltip = "Will eat all candy in the player inventory when key is active." })
+GeneralAutomation:AddToggle("GA_AutoHide", { Text = "Automatic Hide", Default = false, Tooltip = "Will automatically predict entities and hide in the nearest available spot when enabled." })
+GeneralAutomation:AddToggle("GA_AutoHide_VisCheck", { Text = "Prediction Visible Check", Default = false, })
+GeneralAutomation:AddSlider("GA_AutoHide_PredictionTime", { Text = "Prediction Time", Default = 0.5, Min = 0.1, Max = 1.5, Rounding = 2, Compact = true, Suffix = "s" })
+GeneralAutomation:AddSlider("GA_AutoHide_PredictionDistanceMultiplier", { Text = "Distance Multiplier", Default = 1, Min = 0.8, Max = 1.5, Rounding = 1, Compact = true, Suffix = "x" })
+GeneralAutomation:AddDivider()
+GeneralAutomation:AddToggle("GA_MinecartInteract", { Text = "Minecart Interact Spam", Default = false, Tooltip = "Automatically spam interact with nearby minecarts when key is active." }):AddKeyPicker("GA_MinecartInteract_K", { Default = "H", SyncToggleState = false, Mode = "Hold", Text = "Minecart Interact Spam", NoUI = false, })
+GeneralAutomation:AddToggle("GA_AnchorAutoSolve", { Text = "Anchor Automatic Solve", Default = false, Tooltip = "Automatically solves any anchor when close enough, if it's the designated one." })
+GeneralAutomation:AddDivider()
+GeneralAutomation:AddToggle("GA_AutoPadlockSolve", { Text = "Automatic Library Padlock", Default = false, Tooltip = "Automatically unlocks padlock with the code when near enough to the set distance." })
+GeneralAutomation:AddSlider("GA_AutoPadlockSolve_Distance", { Text = "Automatic Padlock Distance", Default = 25, Min = 10, Max = 50, Rounding = 0, Compact = false, Tooltip = "Minimum distance for auto padlock solver to input the correct code."})
 
----------------------------------------------------------------- REMOTE SEARCH / BLOCKING
+local GeneralNotifying = Tabs.General:AddRightGroupbox("Notifying")
+GeneralNotifying:AddToggle("GN_Enabled", { Text = "Enabled", Default = false, Tooltip = "Master switch for notifications." })
+GeneralNotifying:AddToggle("GN_NotificationSound", { Text = "Play Sound", Default = false, Tooltip = "Plays sound to draw better attention when notifying." })
+GeneralNotifying:AddSlider("GN_NotificationSound_Volume", { Text = "Sound Volume", Default = 2, Min = 1, Max = 10, Rounding = 1, Compact = false })
+GeneralNotifying:AddDivider()
+GeneralNotifying:AddToggle("GN_AnchorCode", { Text = "Anchor Code", Default = false, Tooltip = "Will notify upon any anchor code being confirmed." })
+GeneralNotifying:AddToggle("GN_PadlockCode", { Text = "Library Padlock Code", Default = false, Tooltip = "Will notify upon padlock code being confirmed." })
+GeneralNotifying:AddToggle("GN_Entities", { Text = "Entity Notifying", Default = false, Tooltip = "Will notify upon a selected entity spawning." })
+GeneralNotifying:AddDropdown("GN_Entities_Options", { Values = { "Rush", "Blitz", "Ambush", "Eyes", "Lookman", "Halt", "Screech", "Gloombat Swarm", "Dread", "A-60", "A-120" }, Default = 0, Multi = true, Text = "Entity List", Tooltip = "Entity whitelist to notify for." })
+GeneralNotifying:AddDivider()
+GeneralNotifying:AddDropdown("GN_NotificationAlignment", { Values = { "Left", "Center", "Right" }, Default = 2, Multi = false, Text = "Horizontal Alignment" })
+GeneralNotifying:AddSlider("GN_NotificationOffset_X", { Text = "X Offset", Default = 0, Min = -1, Max = 1, Rounding = 2, Compact = true })
+GeneralNotifying:AddSlider("GN_NotificationOffset_Y", { Text = "Y Offset", Default = 0, Min = -1, Max = 1, Rounding = 2, Compact = true })
+GeneralNotifying:AddSlider("GN_NotificationDPISize", { Text = "Size Multiplier", Default = 1, Min = 0.8, Max = 3, Rounding = 1, Compact = true })
+GeneralNotifying:AddButton("Test Notify", function()
+    Notify("This is a test notification.", "Lorem ipsum dolor sit amet, consectetur adipiscing elit.", 2.5, true)
+end)
 
-local function isRemote(object)
-    return object:IsA("RemoteEvent")
-        or object:IsA("RemoteFunction")
-        or object:IsA("UnreliableRemoteEvent")
-end
-
-local function fullPath(object)
-    local ok, path = pcall(object.GetFullName, object)
-    return ok and path or object.Name
-end
-
-local function normalize(text)
-    return Config.SnapIgnoreCase and text:lower() or text
-end
-
-local function parseTerms()
-    local terms, seen = {}, {}
-
-    for term in Config.SnapRemoteNames:gmatch("[^,;\r\n]+") do
-        term = term:match("^%s*(.-)%s*$")
-        term = term:gsub("^game%.", "")
-        term = normalize(term)
-
-        if term ~= "" and not seen[term] then
-            seen[term] = true
-            terms[#terms + 1] = term
-        end
-    end
-
-    Snap.terms = terms
-end
-
-local function matchesRemote(remote)
-    if #Snap.terms == 0 then
-        return false
-    end
-
-    local name = normalize(remote.Name)
-    local path = normalize(fullPath(remote))
-
-    for _, term in ipairs(Snap.terms) do
-        if Config.SnapExactMatch then
-            if name == term or path == term then
-                return true
-            end
-        elseif name:find(term, 1, true) or path:find(term, 1, true) then
-            return true
-        end
-    end
-
-    return false
-end
-
-local function restoreRemoteListeners(remote)
-    local owned = Snap.disabled[remote]
-    if not owned then
-        return
-    end
-
-    for connection in pairs(owned) do
-        pcall(function()
-            connection:Enable()
-        end)
-    end
-
-    Snap.disabled[remote] = nil
-end
-
-local function restoreAllSnapListeners()
-    local remotes = {}
-    for remote in pairs(Snap.disabled) do
-        remotes[#remotes + 1] = remote
-    end
-    for _, remote in ipairs(remotes) do
-        restoreRemoteListeners(remote)
-    end
-end
-
-local function connectionEnabled(connection)
-    local ok, value = pcall(function()
-        return connection.Enabled
-    end)
-    if ok and type(value) == "boolean" then
-        return value
-    end
-
-    ok, value = pcall(function()
-        return connection.State
-    end)
-    if ok and type(value) == "boolean" then
-        return value
-    end
-
-    return nil
-end
-
-local function installSnapHook()
-    if Snap.hookInstalled then
-        return true
-    end
-
-    if type(hookmetamethod) ~= "function"
-        or type(getnamecallmethod) ~= "function"
-    then
-        Snap.hookError = "hookmetamethod/getnamecallmethod unavailable"
-        return false
-    end
-
-    local previous
-
-    local function interceptor(self, ...)
-        if alive and Config.BlockSnap and Config.SnapBlockOutgoing
-            and Snap.matches[self]
-        then
-            local method = getnamecallmethod()
-            if method == "FireServer" or method == "InvokeServer" then
-                Snap.outgoingBlocked += 1
-                return nil
-            end
-        end
-
-        return previous(self, ...)
-    end
-
-    local closure = newcclosure and newcclosure(interceptor) or interceptor
-    local ok, result = pcall(hookmetamethod, game, "__namecall", closure)
-
-    if not ok or type(result) ~= "function" then
-        Snap.hookError = tostring(result)
-        return false
-    end
-
-    previous = result
-    Snap.previousNamecall = result
-    Snap.hook = closure
-    Snap.hookInstalled = true
-    Snap.hookError = nil
-    return true
-end
-
-local function removeSnapHook()
-    if not Snap.hookInstalled then
-        return true
-    end
-
-    local ok, err = pcall(
-        hookmetamethod, game, "__namecall", Snap.previousNamecall
-    )
-
-    if ok then
-        Snap.hookInstalled = false
-        Snap.previousNamecall = nil
-        Snap.hook = nil
-        Snap.hookError = nil
-        return true
-    end
-
-    -- Blocking gates are disabled by callers before restoration.
-    Snap.hookError = tostring(err)
-    return false, tostring(err)
-end
-
-local function disableRemoteListeners(remote)
-    if not (
-        remote:IsA("RemoteEvent")
-        or remote:IsA("UnreliableRemoteEvent")
-    ) then
-        return 0, 0
-    end
-
-    local ok, listeners = pcall(getconnections, remote.OnClientEvent)
-    if not ok or type(listeners) ~= "table" then
-        return 0, 1
-    end
-
-    local owned = Snap.disabled[remote]
-    if not owned then
-        owned = {}
-        Snap.disabled[remote] = owned
-    end
-
-    local skipped = 0
-
-    for _, connection in pairs(listeners) do
-        if owned[connection] then
-            pcall(function()
-                connection:Disable()
-            end)
-        else
-            local enabled = connectionEnabled(connection)
-
-            if enabled == true then
-                local disabled = pcall(function()
-                    connection:Disable()
-                end)
-                if disabled then
-                    owned[connection] = true
-                else
-                    skipped += 1
+local ExploitSelf = Tabs.Exploit:AddLeftGroupbox("Self")
+ExploitSelf:AddToggle("ES_AlwaysJump", { Text = "Always Enable Jumping", Default = false, Tooltip = "Enables jumping at all times." })
+ExploitSelf:AddDivider()
+ExploitSelf:AddToggle("ES_AntiGloombat", { Text = "Anti-Gloombat Egg", Default = false, Tooltip = "Disallows touching on any Gloombat egg hitbox." })
+ExploitSelf:AddToggle("ES_AntiGiggle", { Text = "Anti-Giggle", Default = false, Tooltip = "Disallows touching on the entity 'Giggle' hitbox." })
+ExploitSelf:AddToggle("ES_AntiSnare", { Text = "Anti-Snare", Default = false, Tooltip = "Disallows touching on the entity 'Snare'." })
+ExploitSelf:AddToggle("ES_AntiDupe", { Text = "Anti-Dupe", Default = false, Tooltip = "Disallows touching on any entity 'Dupe' fake doors." })
+ExploitSelf:AddToggle("ES_AntiEyes", { Text = "Anti-Eyes", Default = false, Tooltip = "Forces character to look down from the entity 'Eyes'." })
+ExploitSelf:AddToggle("ES_AntiLookman", { Text = "Anti-Lookman", Default = false, Tooltip = "Forces character to look down from the entity 'Lookman'." })
+ExploitSelf:AddToggle("ES_AntiChanedlier", { Text = "Anti-Chandelier", Default = false, Tooltip = "Disallows touching on any fallen chandeliers during the seek chase." })
+ExploitSelf:AddToggle("ES_AntiSeekArms", { Text = "Anti-Seek Arms", Default = false, Tooltip = "Disallows touching on any seek arms during the seek chase." })
+local ExploitTroll = Tabs.Exploit:AddLeftGroupbox("Trolling")
+if game.ReplicatedStorage.GameData.Floor.Value == "Mines" then 
+    ExploitTroll:AddButton({
+        Text = "AntiRush/AntiAmbush",
+        Func = function()
+            task.spawn(function()
+                for i = 1, 11 do
+                    task.spawn(function()
+                        game.ReplicatedStorage.RemotesFolder.RequestAsset:InvokeServer("Remote")
+                    end)
                 end
-            elseif enabled == nil then
-                -- Do not modify listeners whose initial state is unknown.
-                skipped += 1
-            end
-        end
-    end
-
-    local count = 0
-    for _ in pairs(owned) do
-        count += 1
-    end
-    return count, skipped
-end
-
-local function updateSnapUI(indexedCount, paths, listenerCount, skipped)
-    if Snap.results then
-        local signature = table.concat(paths, "\n")
-        if signature ~= Snap.lastOptions then
-            Snap.lastOptions = signature
-            Snap.selectedPath = nil
-            pcall(function()
-                Snap.results:Refresh(
-                    #paths > 0 and paths or { "No matching remotes" }
-                )
             end)
-        end
-    end
-
-    local outgoing
-    if not Config.BlockSnap or not Config.SnapBlockOutgoing then
-        outgoing = "off"
-    elseif Snap.hookInstalled then
-        outgoing = "active"
-    else
-        outgoing = "unavailable: " .. tostring(Snap.hookError)
-    end
-
-    local incoming
-    if not Config.BlockSnap or not Config.SnapBlockIncoming then
-        incoming = "off"
-    elseif type(getconnections) ~= "function" then
-        incoming = "getconnections unavailable"
-    else
-        incoming = ("%d owned listeners disabled; %d skipped/errors")
-            :format(listenerCount, skipped)
-    end
-
-    local text = (
-        "%s | Indexed remotes: %d | Matches: %d\n"
-        .. "Outgoing: %s | Dropped calls: %d\nIncoming: %s"
-    ):format(
-        Config.BlockSnap and "BLOCKING ENABLED" or "SEARCH ONLY",
-        indexedCount,
-        #paths,
-        outgoing,
-        Snap.outgoingBlocked,
-        incoming
-    )
-
-    if #Snap.terms == 0 then
-        text ..= "\nEnter at least one remote name or full path."
-    end
-
-    if text ~= Snap.lastStatus then
-        Snap.lastStatus = text
-        if alive and Snap.paragraph then
-            pcall(function()
-                Snap.paragraph:Set({
-                    Title = "Remote search status",
-                    Content = text,
-                })
-            end)
-        end
-    end
+        end,
+        DoubleClick = false,
+        Tooltip = "Disables uhh rush/ambush on floor2",
+    })
 end
-
-local function refreshSnap()
-    if not alive then
-        return
-    end
-
-    parseTerms()
-
-    local nextMatches = {}
-    local paths = {}
-    local indexedCount = 0
-
-    for remote in pairs(Snap.registry) do
-        if remote:IsDescendantOf(game) then
-            indexedCount += 1
-            if matchesRemote(remote) then
-                nextMatches[remote] = true
-                paths[#paths + 1] = fullPath(remote)
-            end
+ExploitTroll:AddToggle("Spamtoolz", { Text = "Spam others Tools", Default = false, Tooltip = "Will basically use up the other person tools by spamming!" }):AddKeyPicker("Spamtoolz_X", { Default = "G", SyncToggleState = false, Mode = "Hold", Text = "Spam others Tools", NoUI = false, })
+ExploitTroll:AddInput("WhitelistKoolpeople",{Default = "", Numeric = false, Finished = true, ClearTextOnFocus = true, Text = "Whitelist for spamtools", Callback = function() 
+task.spawn(function()   
+    for _,Player in pairs(game.Players:GetPlayers()) do
+        if Value == Player.Name and not plr == LocalPlayer.Name then
+            table.insert(friends, Player.Name)
+            Notify("Whitelistfromspamtools", "Whitelisted!")
+        elseif Value == LocalPlayer.Name then
+            Notify("Whitelistfromspamtools", "failed you tried whitelisting localplayer")
         else
-            Snap.registry[remote] = nil
+            print("sdf")
+            Notify("Whitelistfromspamtools", "Player Not exist!")
         end
     end
+end) end, })
 
-    for remote in pairs(Snap.matches) do
-        if not nextMatches[remote] then
-            restoreRemoteListeners(remote)
-        end
-    end
+local ExploitBypass = Tabs.Exploit:AddRightGroupbox("Bypass")
+ExploitBypass:AddToggle("EB_CrouchSpoof", { Text = "Crouch Spoof", Default = false, Tooltip = "Spoofs crouching, or in other words the game will think you're crouching. Useful for figure rooms." })
+ExploitBypass:AddToggle("EB_SpeedBypass", { Text = "Speed Bypass", Default = false, Tooltip = "Attempts to mitigate the speed anticheat." })
+ExploitBypass:AddToggle("EB_ACManipulate", { Text = "Anti-Cheat Manipulation", Default = false, Tooltip = "Will teleport to the opposite direction the camera is facing to manipulate the anticheat into rubberbanding you the opposite way." }):AddKeyPicker("EB_ACManipulate_K", { Default = "T", SyncToggleState = false, Mode = "Hold", Text = "Anti-Cheat Manipulate", NoUI = false, })
 
-    Snap.matches = nextMatches
-    table.sort(paths)
+local ExploitRemovals = Tabs.Exploit:AddRightGroupbox("Removals")
+ExploitRemovals:AddToggle("ER_RemoveSeek", { Text = "Remove Seek Chase", Default = false, Tooltip = "Completely disables the entity 'Seek'." })
+ExploitRemovals:AddToggle("ER_NoScreech", { Text = "No Screech", Default = false, Tooltip = "Completely disables the entity 'Screech'." })
+ExploitRemovals:AddToggle("ER_NoA90", { Text = "No A-90", Default = false, Tooltip = "Completely disables the entity 'A-90'." })
+ExploitRemovals:AddToggle("ER_NoShade", { Text = "No Halt", Default = false, Tooltip = "Completely disables the entity 'Halt'." })
+ExploitRemovals:AddDivider()
+ExploitRemovals:AddToggle("ER_NoA90Damage", { Text = "No A-90 Damage", Default = false, Tooltip = "Completely disables entity 'A-90' damaging you." })
+ExploitRemovals:AddToggle("ER_NoScreechDamage", { Text = "No Screech Damage", Default = false, Tooltip = "Completely disables entity 'Screech' damaging you." })
+ExploitRemovals:AddToggle("ER_NoShadeDamage", { Text = "No Halt Damage", Default = false, Tooltip = "Completely disables entity 'Halt' damaging you." })
 
-    local listenerCount, skipped = 0, 0
+--[[local ESPEntities = Tabs.ESP:AddLeftGroupbox("Entities")
+ESPEntities:AddToggle("ESPE_Enabled", { Text = "Enabled", Default = false })
+ESPEntities:AddDivider()
+ESPEntities:AddToggle("ESPE_Name", { Text = "Name", Default = false })
+ESPEntities:AddToggle("ESPE_Distance", { Text = "Distance", Default = false })
+ESPEntities:AddToggle("ESPE_Fill", { Text = "Highlight Fill", Default = false })
+ESPEntities:AddToggle("ESPE_Enabled", { Text = "Highlight Outline", Default = false })]]
 
-    if Config.BlockSnap and #paths > 0 then
-        if Config.SnapBlockOutgoing then
-            installSnapHook()
-        end
+-- we have notify entity which uhh gives entity esps! so like very useless!!!!!!!!!!!!!!!!!!!
+local ESPLXUSER = Tabs.ESP:AddLeftGroupbox("LXStuff")
+ESPLXUSER:AddToggle("LXPP_Enabled", { Text = "ESP LXUSER", Default = false })
+:AddColorPicker("LXPLAYERFILLCOLOR", { Default = Color3.new(0.141176, 0.792156, 0.282352), Title = "Fill Color" })
+:AddColorPicker("LXPPLAYEROUTLINECOLOR", { Default = Color3.new(0.141176, 0.792156, 0.282352), Title = "Outline Color" })
+ESPLXUSER:AddDivider()
 
-        if Config.SnapBlockIncoming and type(getconnections) == "function" then
-            for remote in pairs(Snap.matches) do
-                local count, misses = disableRemoteListeners(remote)
-                listenerCount += count
-                skipped += misses
-            end
-        else
-            restoreAllSnapListeners()
-        end
-    else
-        restoreAllSnapListeners()
-    end
 
-    updateSnapUI(indexedCount, paths, listenerCount, skipped)
+local ESPPlayers = Tabs.ESP:AddLeftGroupbox("Players")
+ESPPlayers:AddToggle("ESPP_Enabled", { Text = "Enabled", Default = false })
+:AddColorPicker("ESPPLAYERFILLCOLOR", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPPLAYEROUTLINECOLOR", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+
+local ESPInteractables = Tabs.ESP:AddRightTabbox("Interactables")
+
+local ESPInteractables_Main = ESPInteractables:AddTab("Main")
+ESPInteractables_Main:AddToggle("ESPI_M_Enabled", { Text = "Enabled", Default = false })
+ESPInteractables_Main:AddDivider()
+ESPInteractables_Main:AddToggle("ESPI_M_Name", { Text = "Name", Default = false })
+ESPInteractables_Main:AddToggle("ESPI_M_Distance", { Text = "Distance", Default = false })
+ESPInteractables_Main:AddToggle("ESPI_M_Fill", { Text = "Highlight Fill", Default = false })
+ESPInteractables_Main:AddToggle("ESPI_M_Enabled", { Text = "Highlight Outline", Default = false })
+
+-- BRO IM SO SORRY LINORIA MADE ME DO IT THIS WAY PLEASE LORD FORGIVE ME
+local ESPInteractables_Configurate = ESPInteractables:AddTab("Configurate")
+ESPInteractables_Configurate:AddToggle("ESPI_C_Doors", { Text = "Door", Default = false })
+:AddColorPicker("ESPI_C_Doors_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_Doors_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_DoorKeys", { Text = "Door Key", Default = false })
+:AddColorPicker("ESPI_C_DoorKeys_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_DoorKeys_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_GoldPiles", { Text = "Door", Default = false })
+:AddColorPicker("ESPI_C_GoldPiles_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_GoldPiles_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_GeneratorFuses", { Text = "Generator Fuse", Default = false })
+:AddColorPicker("ESPI_C_GeneratorFuses_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_GeneratorFuses_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_Generators", { Text = "Generator", Default = false })
+:AddColorPicker("ESPI_C_Generators_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_Generators_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_GateLevers", { Text = "Gate Lever", Default = false })
+:AddColorPicker("ESPI_C_GateLevers_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_GateLevers_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_LibraryBooks", { Text = "Library Book", Default = false })
+:AddColorPicker("ESPI_C_LibraryBooks_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_LibraryBooks_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_BreakerPoles", { Text = "Breaker Pole", Default = false })
+:AddColorPicker("ESPI_C_BreakerPoles_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_BreakerPoles_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_Anchors", { Text = "Anchor", Default = false })
+:AddColorPicker("ESPI_C_Anchors_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_Anchors_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_BackroomsLevers", { Text = "Timer Lever", Default = false })
+:AddColorPicker("ESPI_C_BackroomsLevers_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_BackroomsLevers_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+ESPInteractables_Configurate:AddToggle("ESPI_C_MiscPickups", { Text = "Misc Items", Default = false })
+:AddColorPicker("ESPI_C_MiscPickups_F", { Default = Color3.new(1, 1, 1), Title = "Fill Color" })
+:AddColorPicker("ESPI_C_MiscPickups_O", { Default = Color3.new(1, 1, 1), Title = "Outline Color" })
+
+local ESPSettings = Tabs.ESP:AddRightGroupbox("ESP Settings")
+ESPSettings:AddDropdown("ESPS_Font", { Values = { "Arial", "SourceSans", "Highway", "Fantasy", "Gotham", "DenkOne", "JosefinSans", "Nunito", "Oswald", "RobotoMono", "Sarpanch", "Ubuntu" }, Default = 9, Multi = false, Text = "Text Font" })
+ESPSettings:AddSlider("ESPS_FontSize", { Text = "Font Size", Default = 20, Min = 10, Max = 32, Rounding = 0, Compact = true })
+ESPSettings:AddDivider()
+ESPSettings:AddSlider("ESPS_FillTransparency", { Text = "Fill Transparency", Default = 0.7, Min = 0, Max = 1, Rounding = 2, Compact = true })
+ESPSettings:AddSlider("ESPS_OutlineTransparency", { Text = "Outline Transparency", Default = 0.2, Min = 0, Max = 1, Rounding = 2, Compact = true })
+ESPSettings:AddDivider()
+ESPSettings:AddSlider("ESPS_FadeTime", { Text = "Fade In / Out Time", Default = 1, Min = 0, Max = 2, Rounding = 2, Compact = true, Suffix = "s" })
+
+ESPSettings:AddDivider()
+ESPSettings:AddToggle("RGB_Mode", {
+    Text = "RGB Mode (ESP + UI)",
+    Default = false,
+    Tooltip = "Makes every ESP color and the main UI accent constantly cycle through RGB."
+})
+
+local VisualsView = Tabs.Visuals:AddLeftGroupbox("View")
+VisualsView:AddSlider("VV_FieldOfView", { Text = "Field of View", Default = 0, Min = 0, Max = 120, Rounding = 0, Compact = true, Tooltip = "Changes camera field of view." })
+VisualsView:AddToggle("VV_NoCamShake", { Text = "No Camera Shake", Default = false, Tooltip = "Removes any camera shaking that will occur from entities or other things." })
+VisualsView:AddToggle("VV_NoLookBob", { Text = "No Look Bobbing", Default = false, Tooltip = "Removes any look bobbing that will occur when walking." })
+VisualsView:AddDivider()
+VisualsView:AddToggle("VV_Thirdperson", { Text = "Thirdperson", Default = false, Tooltip = "Changes camera visibility to view local character from the third person." }):AddKeyPicker("VV_Thirdperson_K", { Default = "V", SyncToggleState = false, Mode = "Toggle", Text = "Thirdperson", NoUI = false })
+VisualsView:AddToggle("VV_ThirdpersonCamCollision", { Text = "Wall Detect", Default = false, Tooltip = "Makes the camera position on a detected wall if there are any, for the sake of visibility." })
+VisualsView:AddSlider("VV_ThirdpersonDistance", { Text = "Distance", Default = 10, Min = 5, Max = 30, Rounding = 0, Compact = true, Tooltip = "Camera distance for thirdperson." })
+VisualsView:AddSlider("VV_ThirdpersonOffset", { Text = "Offset", Default = 0, Min = -5, Max = 5, Rounding = 1, Compact = true, Tooltip = "Camera left/right offset for thirdperson." })
+VisualsView:AddSlider("VV_ThirdpersonOffsetUp", { Text = "Vertical Offset", Default = 0, Min = -5, Max = 5, Rounding = 1, Compact = true, Tooltip = "Camera up/down offset for thirdperson." })
+VisualsView:AddDivider()
+VisualsView:AddToggle("VV_ViewmodelOffset", { Text = "Viewmodel Offset", Default = false, Tooltip = "Modifier for character viewmodel when holding tools." })
+VisualsView:AddSlider("VV_ViewmodelOffset_X", { Text = "X", Default = 0, Min = -5, Max = 5, Rounding = 1, Compact = true, })
+VisualsView:AddSlider("VV_ViewmodelOffset_Y", { Text = "Y", Default = 0, Min = -5, Max = 5, Rounding = 1, Compact = true, })
+VisualsView:AddSlider("VV_ViewmodelOffset_Z", { Text = "Z", Default = 0, Min = -5, Max = 5, Rounding = 1, Compact = true, })
+
+local VisualsWorld = Tabs.Visuals:AddRightGroupbox("World")
+VisualsWorld:AddToggle("VW_Ambience", { Text = "Ambience", Default = false, Tooltip = "Changes color of the map." }):AddColorPicker("VW_Ambience_C", { Default = Color3.new(1, 1, 1), Title = "Ambience Color" })
+VisualsWorld:AddToggle("VW_NoFog", { Text = "Remove Fog", Default = false, Tooltip = "Removes map fog if available." })
+VisualsWorld:AddDivider()
+VisualsWorld:AddToggle("VW_RushNodes", {Text = "Show Rush Nodes", Tooltip = "Shows the path Rush and Ambush will take when moving."})
+
+local VisualsRemovals = Tabs.Visuals:AddRightGroupbox("Removals")
+VisualsRemovals:AddToggle("VR_NoHasteEffect", { Text = "No Haste Effects", Default = false, Tooltip = "Removes vignette and red color correction effect when haste spawns." })
+VisualsRemovals:AddToggle("VR_NoHidingVignette", { Text = "No Hiding Vignette", Default = false, Tooltip = "Removes screen vignette when hiding." })
+VisualsRemovals:AddToggle("VR_NoHaltEffect", { Text = "No Halt Effects", Default = false, Tooltip = "Removes flashing effects during halt room." })
+VisualsRemovals:AddToggle("VR_NoReviveCutscene", { Text = "No Revive Cutscene", Default = false, Tooltip = "Removes the heart cutscene when reviving." })
+VisualsRemovals:AddDivider()
+VisualsRemovals:AddToggle("VR_TimothyJumpscare", { Text = "Remove Timothy Jumpscare", Default = false, Tooltip = "Removes the jumpscare upon timothy spawning." })
+VisualsRemovals:AddToggle("VR_NoGlitchJumpscare", { Text = "Remove Glitch Jumpscare", Default = false, Tooltip = "Removes the client sided glitch jumpscare." })
+VisualsRemovals:AddToggle("VR_NoVoidEffect", { Text = "Remove Void Jumpscare", Default = false, Tooltip = "Removes the client sided void effect." })
+VisualsRemovals:AddToggle("VR_NoSeekEffects", { Text = "Remove Seek Room Effects", Default = false, Tooltip = "Removes the client sided seek eyes and texture effects during the teasing and chase." })
+
+local MiscMovement = Tabs.Misc:AddLeftGroupbox("Movement")
+MiscMovement:AddToggle("MM_Walkspeed", { Text = "Enable Speed Modifier", Default = false, Tooltip = "Sets player speed according to value set." })
+MiscMovement:AddSlider("MM_Walkspeed_S", { Text = "Walkspeed Amount", Default = 20, Min = 10, Max = 50, Rounding = 0, Compact = true, Tooltip = "Controls the player walkspeed amount." })
+MiscMovement:AddSlider("MM_Walkspeed_Boost", { Text = "Ladder Speed Boost", Default = 0, Min = 0, Max = 50, Rounding = 0, Compact = true, Tooltip = "Speed boost for climbing up ladders. High values may become unstable." })
+MiscMovement:AddDivider()
+MiscMovement:AddToggle("MM_NoAcceleration", { Text = "No Acceleration", Default = false, Tooltip = "Removes acceleration while moving or switching direction." })
+
+local MiscAudio = Tabs.Misc:AddRightGroupbox("Audio")
+MiscAudio:AddToggle("MA_SilentJammin", { Text = "Silent Jammin Modifier", Default = false, Tooltip = "Removes the jeffs shop jammin modifier music." })
+MiscAudio:AddDivider()
+MiscAudio:AddToggle("MA_NoHasteSound", { Text = "No Haste Sounds", Default = false, Tooltip = "Mutes the extremely obnoxious ambience when haste spawns." })
+MiscAudio:AddToggle("MA_SilentInteracting", { Text = "No Interacting Sound", Default = false, Tooltip = "Mutes sound when interacting with a prompt." })
+MiscAudio:AddToggle("MA_NoRandomAmbience", { Text = "No Random Ambience", Default = false, Tooltip = "Removes any random noise ambience that may occur." })
+MiscAudio:AddToggle("MA_SilentGloombat", { Text = "Silent Gloombats", Default = false, Tooltip = "Makes any gloombat flying and roaring silent, due to it potentially triggering or heavily bothering some people." })
+--MiscAudio:AddToggle("MA_NoFigureFootsteps", { Text = "Silent Figure Steps", Default = false, Tooltip = "Removes figure footsteps." })
+
+local MiscellaneousOther = Tabs.Misc:AddLeftGroupbox("Other")
+MiscellaneousOther:AddToggle("MO_antirobloxvoid", { Text = "No Roblox Void", Default = false, Tooltip = "Removes the ROBLOX fallen parts destroy height." })
+MiscellaneousOther:AddDivider()
+MiscellaneousOther:AddButton("Play Again", function()
+    game.ReplicatedStorage.RemotesFolder.PlayAgain:FireServer()
+end)
+MiscellaneousOther:AddButton("Lobby", function()
+    game.ReplicatedStorage.RemotesFolder.Lobby:FireServer()
+end)
+MiscellaneousOther:AddButton("Revive", function()
+    game.ReplicatedStorage.RemotesFolder.Revive:FireServer()
+end)
+
+-- Variables vvv
+
+local A90Hook
+local ScreechHook
+local TimothyHook
+
+LocalPlayer.Character:SetAttribute("CanJump", LocalPlayer.Character:GetAttribute("CanJump") or false) 
+local CanJump = LocalPlayer.Character:GetAttribute("CanJump")
+
+LocalPlayer.Character:SetAttribute("SpeedBoost", LocalPlayer.Character:GetAttribute("SpeedBoost") or 0)
+LocalPlayer.Character:SetAttribute("SpeedBoostBehind", LocalPlayer.Character:GetAttribute("SpeedBoost") or 0)
+LocalPlayer.Character:SetAttribute("SpeedBoostExtra", LocalPlayer.Character:GetAttribute("SpeedBoost") or 0)
+
+local OldAccel = LocalPlayer.Character.HumanoidRootPart.CustomPhysicalProperties
+
+local PadlockCode
+local PadlockCode_N
+local OldFog
+local Atmosphere = game.Lighting:FindFirstChildWhichIsA("Atmosphere")
+if Atmosphere then
+    OldFog = Atmosphere.Density
 end
 
-local function queueSnapRefresh()
-    if Snap.refreshQueued or not alive then
-        return
-    end
+local OldFogEnd = game.Lighting.FogEnd
 
-    Snap.refreshQueued = true
-    task.defer(function()
-        Snap.refreshQueued = false
-        if not alive then
-            return
-        end
-        local ok, err = pcall(refreshSnap)
-        if not ok then
-            warn("[haxbey engine] Remote search error: " .. tostring(err))
-            notify("Remote search error", tostring(err))
-        end
-    end)
-end
+-- Require Variables vvv
 
-local function scanAllRemotes()
-    local registry = {}
-    for _, object in ipairs(game:GetDescendants()) do
-        if isRemote(object) then
-            registry[object] = true
-        end
-    end
-    Snap.registry = registry
-    queueSnapRefresh()
-end
+local Main_Game = require(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
+local ShadeModule = require(game.ReplicatedStorage.ModulesClient.EntityModules.Shade)
+local GlitchModule = require(game.ReplicatedStorage.ModulesClient.EntityModules.Glitch)
+local VoidModule = require(game.ReplicatedStorage.ModulesClient.EntityModules.Void)
+local SeekModule = require(game.ReplicatedStorage.ModulesClient.EntityModules.Seek)
 
-local function setBlockSnap(value)
-    Config.BlockSnap = value == true
-    Snap.timer = 0
+local ShadeFunction = ShadeModule.stuff
+local GlitchFunction = GlitchModule.stuff
+local VoidFunction = VoidModule.stuff
+local SeekFunction = SeekModule.tease
 
-    if not Config.BlockSnap then
-        restoreAllSnapListeners()
-        local ok, err = removeSnapHook()
-        if not ok then
-            notify(
-                "Hook cleanup",
-                "Blocking is off; hook remains pass-through: " .. tostring(err)
-            )
-        end
-    end
+-- Instance Variables vvv
 
-    queueSnapRefresh()
-end
+local Rooms = workspace.CurrentRooms
 
----------------------------------------------------------------- CLEANUP
+local ThirdpersonParts = Instance.new("Folder", workspace)
+ThirdpersonParts.Name = "_ThirdpersonParts"
 
-local unload
-unload = function()
-    if not alive then
-        return
-    end
+local LXNotifications = Instance.new("ScreenGui", game.CoreGui)
+LXNotifications.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+LXNotifications.ScreenInsets = Enum.ScreenInsets.None
+LXNotifications.Name = "_LXNotifications"
 
-    Config.BlockSnap = false
-    Snap.matches = {}
-    alive = false
+local NotificationHolder = Instance.new("Frame", LXNotifications)
+NotificationHolder.Size = UDim2.fromScale(1, 1)
+NotificationHolder.Transparency = 1
 
-    restoreAllSnapListeners()
-    local hookRemoved, hookError = removeSnapHook()
-    if not hookRemoved then
-        warn("[haxbey engine] Hook is pass-through; restoration failed: "
-            .. tostring(hookError))
-    end
+local ClonedCollision = LocalPlayer.Character.CollisionPart:Clone()
+ClonedCollision.Name = "_CollisionClone"
+ClonedCollision.Massless = true
+ClonedCollision.Parent = LocalPlayer.Character
+ClonedCollision.CanCollide = false
+ClonedCollision.CanQuery = false
+ClonedCollision.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.7, 0, 1, 1)
 
-    for _, state in ipairs(browserStates) do
-        state.token += 1
-    end
 
-    RunService:UnbindFromRenderStep(renderName)
+-- Table Variables vvv
 
-    for _, connection in ipairs(connections) do
-        pcall(function()
-            connection:Disconnect()
-        end)
-    end
-    table.clear(connections)
+local AnchorIdentify = {
+    ["A"] = 1,
+    ["B"] = 2,
+    ["C"] = 3,
+    ["D"] = 4,
+    ["E"] = 5,
+    ["F"] = 6
+}
+local EntityDistances = {
+    ["RushMoving"] = 50,
+    ["BackdoorRush"] = 50,
+    ["AmbushMoving"] = 100,
+    ["A60"] = 100,
+    ["A120"] = 35
+}
+local LightSources = {
+    "Flashlight",
+    "Candle",
+    "Straplight",
+    "Lighter",
+    "LaserPointer",
+    "Bulklight",
+    "Glowsticks"
+}
 
-    restoreAllProperties()
+local MiscPickups = {
+    ["Glowsticks"] = "Glowstick",
+    ["StarJug"] = "Barrel of Starlight",
+    ["Lockpick"] = "Lock-Pick",
+    ["Bandage"] = "Bandage",
+    ["StarVial"] = "Vial of Starlight",
+    ["SkeletonKey"] = "Skeleton Key",
+    ["Crucifix"] = "Crucifix",
+    ["CrucifixWall"] = "Crucifix",
+    ["Flashlight"] = "Flashlight",
+    ["Candle"] = "Candle",
+    ["Straplight"] = "Straplight",
+    ["Vitamins"] = "Vitamins",
+    ["Lighter"] = "Lighter",
+    ["Shears"] = "Shears",
+    ["BatteryPack"] = "Battery Pack",
+    ["BandagePack"] = "Bandage Pack",
+    ["LaserPointer"] = "Laser Pointer",
+    ["Bulklight"] = "Bulk Light",
+    ["Battery"] = "Battery",
+    ["Candy"] = "Candy"
+}
+local EspTable = {
+    Interactables = {
+        GoldPiles = {},
+        Doors = {},
+        DoorKeys = {},
+        GeneratorFuses = {},
+        Generators = {},
+        GateLevers = {},
+        BackroomsLevers = {},
+        LibraryBooks = {},
+        BreakerPoles = {},
+        Anchors = {},
 
-    local remaining = {}
-    for object in pairs(drawings) do
-        remaining[#remaining + 1] = object
-    end
-    for _, object in ipairs(remaining) do
-        removeDrawing(object)
-    end
-
-    table.clear(tracked)
-    table.clear(Snap.registry)
-
-    if overlay then
-        pcall(function()
-            overlay:Destroy()
-        end)
-    end
-    pcall(function()
-        Rayfield:Destroy()
-    end)
-
-    if env.HaxbeyEngineUnload == unload then
-        env.HaxbeyEngineUnload = nil
-    end
-end
-
-env.HaxbeyEngineUnload = unload
-
----------------------------------------------------------------- WINDOW
-
-local title = Config.MenuTitle
-if Config.TitleIcon ~= "" then
-    title ..= " " .. Config.TitleIcon
-end
-
-local Window = Rayfield:CreateWindow({
-    Name = title,
-    LoadingTitle = "haxbey engine",
-    LoadingSubtitle = "by ByHAXBEY (Furkan)",
-    Theme = RedTheme,
-    ToggleUIKeybind = Config.MenuKey,
-    DisableRayfieldPrompts = true,
-    DisableBuildWarnings = true,
-    ConfigurationSaving = { Enabled = false },
-    Discord = {
-        Enabled = false,
-        Invite = "",
-        RememberJoins = false,
+        MiscPickups = {}
     },
-    KeySystem = false,
-})
 
-local Tabs = {
-    ESP = Window:CreateTab("ESP", 4483362458),
-    Char = Window:CreateTab("Character", 4483362458),
-    Aim = Window:CreateTab("Aim", 4483362458),
-    Catalog = Window:CreateTab("Catalog", 4483362458),
-    Store = Window:CreateTab("Store", 4483362458),
-    Settings = Window:CreateTab("Config", 4483362458),
+    Entities = {},
+    Players = {}
 }
 
-local function toggle(tab, name, key, callback)
-    local control = tab:CreateToggle({
-        Name = name,
-        CurrentValue = Config[key],
-        Flag = "HX_" .. key,
-        Callback = function(value)
-            Config[key] = value
-            if callback then
-                callback(value)
+task.spawn(function()
+	while task.wait() and not Library.Unloaded do
+        if Toggles.DS_Debug and Toggles.DS_Debug.Value then
+            for _, Table in EspTable.Interactables do
+        
+                for i, v in Table do
+                    print(i, unpack(v))
+                end
+
             end
-        end,
-    })
-    toggles[key] = control
-    return control
-end
+            for i, v in EspTable.Entities do
+        
+                print(i, unpack(v))
 
-local function slider(tab, name, key, minimum, maximum, increment, suffix)
-    return tab:CreateSlider({
-        Name = name,
-        Range = { minimum, maximum },
-        Increment = increment,
-        Suffix = suffix or "",
-        CurrentValue = Config[key],
-        Flag = "HX_" .. key,
-        Callback = function(value)
-            Config[key] = value
-        end,
-    })
-end
-
----------------------------------------------------------------- OVERLAY
-
-local overlayParent = CoreGui
-if gethui then
-    local ok, result = pcall(gethui)
-    if ok and result then
-        overlayParent = result
-    end
-end
-
-overlay = instance("ScreenGui", {
-    Name = "HaxbeyEngineOverlay",
-    ResetOnSpawn = false,
-    IgnoreGuiInset = true,
-    DisplayOrder = 998,
-    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-}, overlayParent)
-
-local function textLabel(parent, text, color, size)
-    return instance("TextLabel", {
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        Text = text,
-        TextColor3 = color,
-        TextSize = size,
-        Font = Enum.Font.GothamBold,
-        TextStrokeTransparency = 0.3,
-        TextStrokeColor3 = Color3.new(),
-    }, parent)
-end
-
-local hud = instance("Frame", {
-    AnchorPoint = Vector2.new(0.5, 0),
-    Position = UDim2.fromScale(0.5, Config.HudY),
-    Size = UDim2.fromOffset(0, 0),
-    AutomaticSize = Enum.AutomaticSize.XY,
-    BackgroundTransparency = 1,
-}, overlay)
-
-instance("UIListLayout", {
-    FillDirection = Enum.FillDirection.Horizontal,
-    Padding = UDim.new(0, 8),
-    VerticalAlignment = Enum.VerticalAlignment.Center,
-}, hud)
-
-local function pill(order)
-    local frame = instance("Frame", {
-        LayoutOrder = order,
-        Size = UDim2.fromOffset(0, 0),
-        AutomaticSize = Enum.AutomaticSize.XY,
-        BackgroundColor3 = Color3.fromRGB(35, 20, 23),
-        BackgroundTransparency = 0.15,
-        BorderSizePixel = 0,
-        Visible = false,
-    }, hud)
-    instance("UICorner", { CornerRadius = UDim.new(0, 8) }, frame)
-    instance("UIStroke", {
-        Color = Color3.fromRGB(185, 40, 45),
-        Thickness = 1.5,
-    }, frame)
-    instance("UIPadding", {
-        PaddingLeft = UDim.new(0, 12),
-        PaddingRight = UDim.new(0, 12),
-        PaddingTop = UDim.new(0, 6),
-        PaddingBottom = UDim.new(0, 6),
-    }, frame)
-    local text = textLabel(frame, "", Color3.new(1, 1, 1), Config.HudTextSize)
-    text.AutomaticSize = Enum.AutomaticSize.XY
-    text.Size = UDim2.fromOffset(0, 0)
-    text.TextStrokeTransparency = 1
-    return frame, text
-end
-
-local countPill, countText = pill(1)
-local fpsPill, fpsText = pill(2)
-
-local warning = textLabel(
-    overlay, Config.WarnText, Config.WarnColorA, Config.WarnTextSize
-)
-warning.AnchorPoint = Vector2.new(0.5, 0)
-warning.Position = UDim2.fromScale(0.5, Config.WarnY)
-warning.Size = UDim2.fromOffset(0, 0)
-warning.AutomaticSize = Enum.AutomaticSize.XY
-warning.Visible = false
-
-local openHeight = math.floor(Config.OpenWidth * 122 / 596 + 0.5)
-local openButton = instance("ImageButton", {
-    Position = UDim2.new(0, 8, 0.5, -openHeight / 2),
-    Size = UDim2.fromOffset(Config.OpenWidth, openHeight),
-    BackgroundColor3 = Color3.fromRGB(110, 25, 30),
-    BackgroundTransparency = 0.15,
-    Image = Config.OpenImage,
-    ScaleType = Enum.ScaleType.Fit,
-    AutoButtonColor = true,
-}, overlay)
-local openText = textLabel(openButton, "HAXBEY", Color3.new(1, 1, 1), 11)
-openText.Size = UDim2.fromScale(1, 1)
-
-connect(openButton.Activated, function()
-    if Rayfield.SetVisibility and Rayfield.IsVisible then
-        pcall(function()
-            Rayfield:SetVisibility(not Rayfield:IsVisible())
-        end)
-    else
-        notify("Menu", "Use Rayfield's mobile reopen control.")
-    end
+            end
+        end
+	end
 end)
 
----------------------------------------------------------------- ESP UI
+-- Functions vvv
 
-Tabs.ESP:CreateSection("Master controls")
-
-local espKeys = {
-    "Enabled", "Box", "Health", "Name", "Item", "Dist",
-    "Bones", "RootDot", "Warn", "Counter", "Fps",
-}
-
-local function setAll(value)
-    for _, key in ipairs(espKeys) do
-        Config[key] = value
-        if toggles[key] then
-            toggles[key]:Set(value)
-        end
-    end
-end
-
-Tabs.ESP:CreateButton({
-    Name = "ESP ALL ON",
-    Callback = function()
-        setAll(true)
-    end,
-})
-Tabs.ESP:CreateButton({
-    Name = "ESP ALL OFF",
-    Callback = function()
-        setAll(false)
-    end,
-})
-
-for _, entry in ipairs({
-    { "ESP master", "Enabled" },
-    { "Team check", "TeamCheck" },
-    { "Corner boxes", "Box" },
-    { "Health bars", "Health" },
-    { "Player names", "Name" },
-    { "Held item", "Item" },
-    { "Distance", "Dist" },
-    { "Skeleton", "Bones" },
-    { "Root dot", "RootDot" },
-    { "Aim warning", "Warn" },
-    { "Enemy counter", "Counter" },
-    { "FPS", "Fps" },
-}) do
-    toggle(Tabs.ESP, entry[1], entry[2])
-end
-
----------------------------------------------------------------- CHARACTER / REMOTE UI
-
-Tabs.Char:CreateSection("Movement")
-toggle(Tabs.Char, "Enable walk speed", "SpeedOn")
-slider(Tabs.Char, "Walk speed", "Speed", 16, 150, 1, "studs/s")
-
-Tabs.Char:CreateSection("Remote search")
-
-Tabs.Char:CreateInput({
-    Name = "Remote names or full paths",
-    CurrentValue = Config.SnapRemoteNames,
-    PlaceholderText = "onPunishment, AnotherRemote",
-    RemoveTextAfterFocusLost = false,
-    Flag = "HX_SnapRemoteNames",
-    Callback = function(value)
-        Config.SnapRemoteNames = tostring(value)
-        queueSnapRefresh()
-    end,
-})
-
-toggle(Tabs.Char, "Exact name / full-path matching", "SnapExactMatch", queueSnapRefresh)
-toggle(Tabs.Char, "Ignore uppercase / lowercase", "SnapIgnoreCase", queueSnapRefresh)
-
-Snap.paragraph = Tabs.Char:CreateParagraph({
-    Title = "Remote search status",
-    Content = "Enter remote names, then press Scan all client-visible remotes.",
-})
-
-Snap.results = Tabs.Char:CreateDropdown({
-    Name = "Matching remote paths",
-    Options = { "No matching remotes" },
-    CurrentOption = { "No matching remotes" },
-    MultipleOptions = false,
-    Flag = "HX_SnapRemoteResults",
-    Callback = function(value)
-        local path = firstOption(value)
-        if path and path ~= "No matching remotes" then
-            Snap.selectedPath = path
-        end
-    end,
-})
-
-Tabs.Char:CreateButton({
-    Name = "Scan all client-visible remotes",
-    Callback = scanAllRemotes,
-})
-
-Tabs.Char:CreateButton({
-    Name = "Copy selected remote path",
-    Callback = function()
-        if Snap.selectedPath then
-            copy(Snap.selectedPath)
-        else
-            notify("No selection", "Select a matching remote path first.")
-        end
-    end,
-})
-
-Tabs.Char:CreateButton({
-    Name = "Copy all matching remote paths",
-    Callback = function()
-        local paths = {}
-        for remote in pairs(Snap.matches) do
-            paths[#paths + 1] = fullPath(remote)
-        end
-        table.sort(paths)
-        if #paths > 0 then
-            copy(table.concat(paths, "\n"))
-        else
-            notify("No matches", "Search for a remote name first.")
-        end
-    end,
-})
-
-toggle(Tabs.Char, "Block outgoing remote calls", "SnapBlockOutgoing", function(value)
-    if not value then
-        removeSnapHook()
-    end
-    queueSnapRefresh()
-end)
-
-toggle(Tabs.Char, "Disable incoming event listeners", "SnapBlockIncoming", function(value)
-    if not value then
-        restoreAllSnapListeners()
-    end
-    queueSnapRefresh()
-end)
-
-toggle(Tabs.Char, "BlockSnap master", "BlockSnap", setBlockSnap)
-
-Tabs.Char:CreateParagraph({
-    Title = "Search and blocking behavior",
-    Content = "Names may be separated by commas, semicolons, or newlines. "
-        .. "All matching remotes are targeted. Turn exact matching off "
-        .. "for substring searches. Full paths narrow duplicate names. "
-        .. "New remotes are indexed automatically. Searches cover only "
-        .. "instances available to this client, not server-only files.",
-})
-
-Tabs.Char:CreateSection("Jump / gravity")
-toggle(Tabs.Char, "Enable jump power", "JumpOn")
-slider(Tabs.Char, "Jump power", "Jump", 50, 250, 1)
-toggle(Tabs.Char, "Enable gravity", "GravOn")
-slider(Tabs.Char, "Gravity", "Grav", 20, 196, 1)
-
-Tabs.Char:CreateSection("Appearance")
-toggle(Tabs.Char, "Enable head size", "HeadOn")
-slider(Tabs.Char, "Head size", "Head", 1, 5, 0.1, "x")
-toggle(Tabs.Char, "Enable transparency", "TransOn")
-slider(Tabs.Char, "Transparency", "Trans", 0, 1, 0.05)
-
----------------------------------------------------------------- AIM UI
-
-Tabs.Aim:CreateSection("Targeting")
-toggle(Tabs.Aim, "Aimbot", "AimEnabled")
-toggle(Tabs.Aim, "Show FOV circle", "ShowFov")
-toggle(Tabs.Aim, "Camera lock", "CamLock")
-toggle(Tabs.Aim, "Character lock", "CharLock")
-toggle(Tabs.Aim, "Teleport to target", "SilentAim")
-toggle(Tabs.Aim, "Visibility check", "VisCheck")
-toggle(Tabs.Aim, "Prediction", "PredictionOn")
-slider(Tabs.Aim, "Prediction", "PredictionVal", 0, 0.5, 0.01, "seconds")
-slider(Tabs.Aim, "FOV radius", "AimFov", 10, 1000, 10, "px")
-slider(Tabs.Aim, "Maximum distance", "AimDist", 50, 1000, 50, "studs")
-slider(Tabs.Aim, "Smoothness", "AimSmooth", 1, 20, 1)
-
----------------------------------------------------------------- HTTP
-
-local httpBusy = false
-local nextRequestAt = 0
-local responseCache = {}
-
-local function current(state, token)
-    return alive and state.token == token
-end
-
-local function setStatus(state, content)
-    if alive and state.status then
-        pcall(function()
-            state.status:Set({ Title = "Status", Content = content })
-        end)
-    end
-end
-
-local function getJson(url, state, token)
-    if not current(state, token) then
-        return nil, "cancelled"
-    end
-    if not httpRequest then
-        return nil, "request() unavailable"
-    end
-
-    local cached = responseCache[url]
-    if cached and os.clock() - cached.time < 30 then
-        return cached.data, "200 (cached)"
-    end
-
-    for attempt = 1, Config.HttpRetries do
-        while alive and (httpBusy or os.clock() < nextRequestAt) do
-            if not current(state, token) then
-                return nil, "cancelled"
+function lawl(Parent, Text)
+    if Toggles.ESPP_Enabled.Value then
+        local Highlight, TextLabel = Esp(Parent, Parent, Parent.Name, Options.ESPPLAYERFILLCOLOR.Value, Options.ESPPLAYEROUTLINECOLOR.Value)
+        table.insert(EspTable.Players, {Highlight, TextLabel})
+        task.spawn(function()
+            repeat task.wait() until not Toggles.ESPP_Enabled.Value or Library.Unloaded 
+            for _,Player in pairs(epiklistofpeople) do          
+                RemoveEspSmoothNoanim(Player.Character)  
             end
             task.wait(0.1)
-        end
+            epiklistofpeople = {}
+        end)
+    end
+end
 
-        if not current(state, token) then
-            return nil, "cancelled"
-        end
+function LXSmth(Parent, Text)
+    if Toggles.LXPP_Enabled.Value then
+        RemoveEspSmoothNoanim(Parent)  
+        local Highlight, TextLabel = Esp(Parent, Parent, Parent.Name, Options.LXPLAYERFILLCOLOR.Value, Options.LXPPLAYEROUTLINECOLOR.Value)
+        table.insert(EspTable.Players, {Highlight, TextLabel})
+        task.spawn(function()
+            repeat task.wait() until not Toggles.LXPP_Enabled.Value or Library.Unloaded 
+            for _,Player in pairs(LXUser) do         
+                RemoveEspSmoothNoanim(Player.Character)  
+                task.wait()   
+                table.insert(epiklistofpeople, Player.Character)
+                lawl(Player.Character, Player.Name)
+            end
+            task.wait(0.1)
+            LXUser = {}  
+        end)
+    end
+end
 
-        httpBusy = true
-        local ok, response = pcall(httpRequest, {
-            Url = url,
-            Method = "GET",
-            Headers = { Accept = "application/json" },
-        })
-        nextRequestAt = math.max(nextRequestAt, os.clock() + Config.HttpGap)
-        httpBusy = false
-
-        if not current(state, token) then
-            return nil, "cancelled"
+task.spawn(function()
+    repeat task.wait() 
+        if not Toggles.ESPP_Enabled.Value and not Library.Unloaded then
+            epiklistofpeople = {}
         end
-        if not ok or type(response) ~= "table" then
-            return nil, "request failed"
+        if not Toggles.LXPP_Enabled.Value and not Library.Unloaded then
+            LXUser = {}
         end
+        for _,Player in pairs(game.Players:GetPlayers()) do            
+            if Player ~= LocalPlayer and not table.find(epiklistofpeople, Player) and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") and Toggles.ESPP_Enabled.Value and not table.find(LXUser, Player) then
+                lawl(Player.Character, Player.Name)
+                table.insert(epiklistofpeople, Player)
+            end
+            if Player ~= LocalPlayer and not table.find(LXUser, Player) and Player.Character:FindFirstChild("HumanoidRootPart") and Toggles.LXPP_Enabled.Value and not Library.Unloaded then
+                if Player:GetAttribute("USINGLOLHAX") == true then
+                    RemoveEspSmoothNoanim(Player.Character)
+                    task.wait()
+                    table.insert(LXUser, Player)
+                    LXSmth(Player.Character, Player.Name)
+                    epiklistofpeople = {}
+                end
+            end
+        end
+    until Library.Unloaded
+end)
+-- this is modified version of the lolhaxv2 get player function!
 
-        local code = tonumber(response.StatusCode or response.Status)
-        if code == 429 then
-            local retryAfter
-            for name, value in pairs(response.Headers or {}) do
-                if tostring(name):lower() == "retry-after" then
-                    retryAfter = tonumber(value)
+local GlobalOffset = 0
+function Notify(TitleText, SubText, Duration, Force)
+    if not Force then
+        if not Toggles.GN_Enabled.Value then return end
+    end
+
+    local DPISize = Options.GN_NotificationDPISize.Value
+
+    local Offset = GlobalOffset
+    GlobalOffset += 0.05 * DPISize
+
+    local MainColor = Options.AccentColor.Value
+    local Alignment = 0.5
+    if Options.GN_NotificationAlignment.Value == "Left" then
+        Alignment = 1
+    elseif Options.GN_NotificationAlignment.Value == "Right" then
+        Alignment = 0
+    end
+
+    local Main = Instance.new("Frame", NotificationHolder)
+    Main.AnchorPoint = Vector2.new(Alignment, 0.5)
+    Main.Size = UDim2.fromScale(0.19 * DPISize, 0.045 * DPISize)
+    Main.Position = UDim2.fromScale(0.5, 0.5)
+    Main.Transparency = 1
+
+    local Line = Instance.new("Frame", Main)
+    Line.AnchorPoint = Vector2.new(0, 1)
+    Line.BorderSizePixel = 0
+    Line.Position = UDim2.fromScale(0, 1)
+    Line.Size = UDim2.fromScale(0, 0.03)
+    Line.Transparency = 1
+
+    local LXLogo = Instance.new("ImageLabel", Main)
+    LXLogo.AnchorPoint = Vector2.new(0.5, 0.5)
+    LXLogo.Position = UDim2.fromScale(0.067, 0.5)
+    LXLogo.Size = UDim2.fromScale(0.121, 0.9)
+    LXLogo.Image = "rbxassetid://90305907167101"
+    LXLogo.ScaleType = Enum.ScaleType.Fit
+    LXLogo.Transparency = 1
+
+    local Title = Instance.new("TextLabel", Main)
+    Title.AnchorPoint = Vector2.new(0, 0.5)
+    Title.Position = UDim2.fromScale(0.135, 0.35)
+    Title.Size = UDim2.fromScale(100, 0.35)
+    Title.Font = Enum.Font.SourceSans
+    Title.Text = "[LOLHAX] " .. TitleText
+    Title.TextScaled = true
+    Title.TextSize = 1
+    Title.TextStrokeTransparency = 0.5
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+    Title.Transparency = 1
+
+    local Description = Instance.new("TextLabel", Main)
+    Description.AnchorPoint = Vector2.new(0, 0.5)
+    Description.Position = UDim2.fromScale(0.135, 0.667)
+    Description.Size = UDim2.fromScale(100, 0.29)
+    Description.Font = Enum.Font.SourceSans
+    Description.Text = SubText
+    Description.TextScaled = true
+    Description.TextSize = 1
+    Description.TextStrokeTransparency = 0.5
+    Description.TextXAlignment = Enum.TextXAlignment.Left
+    Description.Transparency = 1
+
+    local Number = math.max(Title.TextBounds.X, Description.TextBounds.X) * 1.125
+    local FinalOffset = math.clamp(Number - 265, 0, 9e9)
+
+    Main.Size += UDim2.fromOffset(FinalOffset, 0)
+
+    if Toggles.GN_NotificationSound.Value then
+        local Sound = Instance.new("Sound", game.CoreGui)
+        Sound.SoundId = "rbxassetid://3318713980"
+        Sound.Volume = Options.GN_NotificationSound_Volume.Value
+
+        Sound.PlayOnRemove = true
+        Sound:Destroy()
+    end
+
+    local Timer = Duration or 10 / 3
+
+    -- cant do an onchanged event.. ;w;
+    local LockColor = game:GetService("RunService").RenderStepped:Connect(function()
+        MainColor = Options.AccentColor.Value
+
+        Main.BackgroundColor3 = Options.MainColor.Value
+        Main.BorderColor3 = MainColor:Lerp(Color3.new(0, 0, 0), 0.4)
+
+        Line.BackgroundColor3 = MainColor
+
+        LXLogo.ImageColor3 = MainColor
+
+        Title.TextColor3 = MainColor
+        Title.TextStrokeColor3 = MainColor:Lerp(Color3.new(0, 0, 0), 0.8)
+
+        Description.TextColor3 = MainColor:Lerp(Color3.new(0, 0, 0), 0.15)
+        Description.TextStrokeColor3 = MainColor:Lerp(Color3.new(0, 0, 0), 0.8)
+    end)
+
+    local Info = TweenInfo.new(4 / 3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    game:GetService("TweenService"):Create(Main, Info, {Position = UDim2.fromScale(0.5, 0.6 + Offset)}):Play()
+
+    game:GetService("TweenService"):Create(Main, Info, {Transparency = 0.35}):Play()
+    game:GetService("TweenService"):Create(Line, Info, {Transparency = 0}):Play()
+    game:GetService("TweenService"):Create(LXLogo, Info, {ImageTransparency = 0}):Play()
+    game:GetService("TweenService"):Create(Title, Info, {TextTransparency = 0}):Play()
+    game:GetService("TweenService"):Create(Description, Info, {TextTransparency = 0}):Play()
+
+    Line:TweenSize(UDim2.fromScale(1, 0.03), "Out", "Linear", Timer)
+
+    task.delay(Timer + 0.1, function()
+        local Info = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        local MainTween = game:GetService("TweenService"):Create(Main, Info, {Position = UDim2.fromScale(0.5, 0.525)})
+        MainTween:Play()
+
+        game:GetService("TweenService"):Create(Main, Info, {Transparency = 1}):Play()
+        game:GetService("TweenService"):Create(Line, Info, {Transparency = 1}):Play()
+        game:GetService("TweenService"):Create(LXLogo, Info, {ImageTransparency = 1}):Play()
+        game:GetService("TweenService"):Create(Title, Info, {TextTransparency = 1}):Play()
+        game:GetService("TweenService"):Create(Description, Info, {TextTransparency = 1}):Play()
+
+        GlobalOffset -= 0.05 * DPISize
+        MainTween.Completed:Once(function()
+            LockColor:Disconnect()
+            Main:Destroy()
+        end)
+    end)
+end
+
+function HasItem(Item)
+    return (LocalPlayer.Character:FindFirstChild(Item) or LocalPlayer.Backpack:FindFirstChild(Item))
+end
+
+function GetHiding()
+    local Closest
+    local Prompt
+
+    for _, v in Rooms[LocalPlayer:GetAttribute("CurrentRoom")].Assets:GetChildren() do
+        if v:IsA("Model") then
+
+            if v.Name == "Locker_Large" or v.Name == "Wardrobe" or v.Name == "Toolshed" or v.Name == "Bed" or v.Name == "Rooms_Locker" or v.Name == "Rooms_Locker_Fridge" or v.Name == "Backdoor_Wardrobe" and v:FindFirstChild("HidePrompt") and v:FindFirstChild("HiddenPlayer") then
+
+                if not v.HiddenPlayer.Value and not v:FindFirstChild("HideEntityOnSpot", true) then
+                    if Closest then
+                        if (LocalPlayer.Character.Collision.Position - v.PrimaryPart.Position).Magnitude < (Closest.PrimaryPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude then
+                            Closest = v
+                            Prompt = v.HidePrompt
+                        end
+                    else
+                        Closest = v
+                        Prompt = v.HidePrompt
+                    end
+
+                end
+            elseif v.Name == "Double_Bed" then
+                for _, x in v:GetChildren() do
+                    if x.Name == "DoubleBed" and x:FindFirstChild("HidePrompt") and x:FindFirstChild("HiddenPlayer") then
+
+                        if not x.HiddenPlayer.Value and not x:FindFirstChild("HideEntityOnSpot", true) then
+                            if Closest then
+                                if (LocalPlayer.Character.Collision.Position - x.PrimaryPart.Position).Magnitude < (Closest.PrimaryPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude then
+                                    Closest = x
+                                    Prompt = x.HidePrompt
+                                end
+                            else
+                                Closest = x
+                                Prompt = x.HidePrompt
+                            end
+                        end
+
+                    end
+                end
+            elseif v.Name == "Dumpster" then
+                for _, x in v:GetChildren() do
+                    if x:FindFirstChild("HidePrompt") and x:FindFirstChild("HiddenPlayer") then
+
+                        if not x.HiddenPlayer.Value and not v.DumpsterBase:FindFirstChild("HideEntityOnSpot") then
+                            if Closest then
+                                if (LocalPlayer.Character.Collision.Position - x.PrimaryPart.Position).Magnitude < (Closest.PrimaryPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude then
+                                    Closest = x
+                                    Prompt = x.HidePrompt
+                                end
+                            else
+                                Closest = x
+                                Prompt = x.HidePrompt
+                            end
+                        end
+
+                    end
+                end
+            end
+
+        elseif v:IsA("Folder") then
+
+            if v.Name == "Blockage" then
+                for _, x in v:GetChildren() do
+                    if x:IsA("Model") and x.Name == "Wardrobe" then
+
+                        if not x.HiddenPlayer.Value then
+                            if Closest then
+                                if (LocalPlayer.Character.Collision.Position - x.PrimaryPart.Position).Magnitude < (Closest.PrimaryPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude then
+                                    Closest = x
+                                    Prompt = x.HidePrompt
+                                end
+                            else
+                                Closest = x
+                                Prompt = x.HidePrompt
+                            end
+                        end
+
+                    end
+                end
+            elseif v.Name == "Vents" then
+                for _, x in v:GetChildren() do
+                    if x.Name == "CircularVent" and v:FindFirstChild("Grate") and x.Grate:FindFirstChild("HidePrompt") and v:FindFirstChild("HiddenPlayer") then
+
+                        if not x.HiddenPlayer.Value and not v:FindFirstChild("HideEntityOnSpot", true) then
+                            if Closest then
+                                if (LocalPlayer.Character.Collision.Position - x.PrimaryPart.Position).Magnitude < (Closest.PrimaryPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude then
+                                    Closest = v
+                                    Prompt = x.Grate.HidePrompt
+                                end
+                            else
+                                Closest = v
+                                Prompt = x.Grate.HidePrompt
+                            end
+                        end
+
+                    end
+                end
+            end
+
+        end
+    end
+
+    for _, v in Rooms[LocalPlayer:GetAttribute("CurrentRoom")]:GetChildren() do
+        if v:IsA("Model") then
+            if v.Name == "CircularVent" and v.Grate:FindFirstChild("HidePrompt") and v:FindFirstChild("HiddenPlayer") then
+
+                if v.HiddenPlayer.Value ~= nil or v.HiddenPlayer.Value ~= "" and not v:FindFirstChild("HideEntityOnSpot", true) then
+                    if Closest then
+                        if (LocalPlayer.Character.Collision.Position - v.PrimaryPart.Position).Magnitude < (Closest.PrimaryPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude then
+                            Closest = v
+                            Prompt = v.Grate.HidePrompt
+                        end
+                    else
+                        Closest = v
+                        Prompt = v.Grate.HidePrompt
+                    end
+                end
+
+            end
+        end
+    end
+
+    return Prompt
+end
+
+function FindLoot(Origin)
+    local Glowsticks = HasItem("Glowsticks")
+    local BandagePack = HasItem("BandagePack")
+    local BatteryPack = HasItem("BatteryPack")
+
+    for _, Loot in Origin:GetChildren() do
+        if Loot.Name == "Glowsticks" and not Options.GA_AutoInteract_Options.Value["Ignore Light Sources"] then
+
+            if not (Glowsticks and Glowsticks:GetAttribute("Durability") >= Glowsticks:GetAttribute("DurabilityMax")) then
+                if (Loot.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < Loot.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                    fireproximityprompt(Loot.ModulePrompt)
+                end
+            end
+
+        elseif Loot.Name == "GoldPile" then
+
+            if (Loot.Hitbox.Position - LocalPlayer.Character.Collision.Position).Magnitude < Loot.LootPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                fireproximityprompt(Loot.LootPrompt)
+            end
+
+        elseif Loot.Name == "Bandage" then
+
+            if (LocalPlayer.Character.Humanoid.Health < 100 or (BandagePack and BandagePack:GetAttribute("Durability") < BandagePack:GetAttribute("DurabilityMax"))) then
+                if (Loot.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < Loot.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                    fireproximityprompt(Loot.ModulePrompt)
+                end
+            end
+
+        elseif Loot.Name == "FuseHolder" then
+
+            if Loot:FindFirstChild("FuseObtain") and Loot.FuseObtain.Hitbox.FuseModel.LocalTransparencyModifier <= 0 then
+                if (Loot.FuseObtain.Hitbox.Position - LocalPlayer.Character.Collision.Position).Magnitude < Loot.FuseObtain.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                    fireproximityprompt(Loot.FuseObtain.ModulePrompt)
+                end
+            end
+
+        elseif Loot.Name == "StarJug" or Loot.Name == "Lockpick" or Loot.Name == "StarVial" or Loot.Name == "SkeletonKey" or Loot.Name == "Crucifix" or Loot.Name == "CrucifixWall" or Loot.Name == "Flashlight" or Loot.Name == "Candle" or Loot.Name == "Straplight" or Loot.Name == "Vitamins" or Loot.Name == "Lighter" or Loot.Name == "Shears" or Loot.Name == "BatteryPack" or Loot.Name == "BandagePack" or Loot.Name == "LaserPointer" or Loot.Name == "Bulklight" then
+            local SameTool = HasItem(Loot:GetAttribute("Pickup"))
+
+            if table.find(LightSources, Loot.Name) and Options.GA_AutoInteract_Options.Value["Ignore Light Sources"] then
+                continue
+            end
+
+           if (Loot.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < Loot.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                fireproximityprompt(Loot.ModulePrompt)
+            end
+
+        elseif Loot.Name == "Candy" then
+
+            if Options.GA_AutoInteract_Options.Value["Ignore Can-Die"] then
+				if Loot:FindFirstChild("Meshes/DOORS_EvilCandy_Cube", true) then continue end
+			end
+
+            if (Loot.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < Loot.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                fireproximityprompt(Loot.ModulePrompt)
+            end
+
+        elseif Loot.Name == "KeyObtain" then
+
+            if not (HasItem("Key") or HasItem("KeyBackdoor")) then
+                if (Loot.Hitbox.Position - LocalPlayer.Character.Collision.Position).Magnitude < Loot.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                    fireproximityprompt(Loot.ModulePrompt)
+                end
+            end
+
+        elseif Loot.Name == "Battery" then
+            local ToolHasNeedsBattery
+
+            for _, Tool in LocalPlayer.Backpack:GetChildren() do
+                if Tool:GetAttribute("RechargeProp") == "Battery" and Tool:GetAttribute("Durability") < Tool:GetAttribute("DurabilityMax") then
+                    ToolHasNeedsBattery = Tool
+
                     break
                 end
             end
-            local delay = math.max(retryAfter or (5 * 2 ^ (attempt - 1)), 2)
-            nextRequestAt = math.max(nextRequestAt, os.clock() + delay)
-            setStatus(state, ("HTTP 429; waiting %.0fs."):format(delay))
-            if attempt == Config.HttpRetries then
-                return nil, "429"
-            end
-        elseif code ~= 200 then
-            return nil, tostring(code or "unknown HTTP status")
-        else
-            local decoded, data = pcall(
-                HttpService.JSONDecode, HttpService, response.Body or ""
-            )
-            if not decoded or type(data) ~= "table" then
-                return nil, "invalid JSON"
-            end
-            responseCache[url] = { time = os.clock(), data = data }
-            return data, "200"
-        end
-    end
 
-    return nil, "429"
-end
+            if not ToolHasNeedsBattery then
+                local Tool = LocalPlayer.Character:FindFirstChildWhichIsA("Tool")
 
----------------------------------------------------------------- CATALOG / STORE
-
-local catalogCategories = {
-    { name = "All" },
-    { name = "Accessories", category = "Accessories" },
-    { name = "Hats", category = "Accessories", subcategory = "HatAccessories" },
-    { name = "Hair", category = "Accessories", subcategory = "HairAccessories" },
-    { name = "Face", category = "Accessories", subcategory = "FaceAccessories" },
-    { name = "Neck", category = "Accessories", subcategory = "NeckAccessories" },
-    { name = "Shoulder", category = "Accessories", subcategory = "ShoulderAccessories" },
-    { name = "Front", category = "Accessories", subcategory = "FrontAccessories" },
-    { name = "Back", category = "Accessories", subcategory = "BackAccessories" },
-    { name = "Waist", category = "Accessories", subcategory = "WaistAccessories" },
-    { name = "Classic Shirts", category = "Clothing", subcategory = "ClassicShirts" },
-    { name = "Classic T-Shirts", category = "Clothing", subcategory = "ClassicTShirts" },
-    { name = "Classic Pants", category = "Clothing", subcategory = "ClassicPants" },
-    { name = "Gear", category = "Gear" },
-}
-
-local storeModes = {
-    { name = "Models", category = "Model", toolbox = 10 },
-    { name = "Decals", category = "Decal", toolbox = 13 },
-    { name = "Audio", category = "Audio", toolbox = 3 },
-    { name = "Plugins", category = "Plugin", toolbox = 38 },
-}
-
-local sortIds = {
-    ["Best selling"] = 2,
-    ["Newest"] = 3,
-    ["Price ascending"] = 4,
-    ["Price descending"] = 5,
-}
-
-local function names(entries)
-    local result = {}
-    for _, entry in ipairs(entries) do
-        result[#result + 1] = entry.name
-    end
-    return result
-end
-
-local function findNamed(entries, name)
-    for _, entry in ipairs(entries) do
-        if entry.name == name then
-            return entry
-        end
-    end
-    return entries[1]
-end
-
-local function priceText(price, status)
-    if price == nil then
-        return status or "Off sale"
-    elseif price == 0 then
-        return "Free"
-    end
-    return Config.RobuxIcon .. " " .. tostring(price)
-end
-
-local function makeBrowser(tab, isCatalog)
-    local state = {
-        token = 0, page = 1, cursors = {}, query = "",
-        category = isCatalog and "All" or "Models",
-        price = "Any", sort = "Relevance",
-        selected = nil, nextCursor = nil,
-        hasNext = false, lookup = {}, loading = false,
-    }
-    browserStates[#browserStates + 1] = state
-
-    tab:CreateSection(isCatalog and "Avatar catalog" or "Creator Store")
-
-    local function invalidate()
-        state.token += 1
-        state.loading = false
-        state.page = 1
-        state.cursors = {}
-        state.hasNext = false
-        state.nextCursor = nil
-        state.selected = nil
-        state.lookup = {}
-        if state.results then
-            state.results:Refresh({ "Press Search" })
-        end
-        setStatus(state, "Search settings changed. Press Search.")
-    end
-
-    tab:CreateInput({
-        Name = "Search text",
-        CurrentValue = "",
-        PlaceholderText = "Enter a search term",
-        RemoveTextAfterFocusLost = false,
-        Flag = isCatalog and "HX_CatalogQuery" or "HX_StoreQuery",
-        Callback = function(value)
-            local query = tostring(value)
-            if query ~= state.query then
-                state.query = query
-                invalidate()
-            end
-        end,
-    })
-
-    tab:CreateDropdown({
-        Name = isCatalog and "Category" or "Asset type",
-        Options = names(isCatalog and catalogCategories or storeModes),
-        CurrentOption = { state.category },
-        MultipleOptions = false,
-        Flag = isCatalog and "HX_CatalogCategory" or "HX_StoreCategory",
-        Callback = function(value)
-            local category = firstOption(value)
-            if category and category ~= state.category then
-                state.category = category
-                invalidate()
-            end
-        end,
-    })
-
-    if isCatalog then
-        tab:CreateDropdown({
-            Name = "Price",
-            Options = { "Any", "Free", "Paid" },
-            CurrentOption = { "Any" },
-            MultipleOptions = false,
-            Flag = "HX_CatalogPrice",
-            Callback = function(value)
-                local price = firstOption(value) or "Any"
-                if price ~= state.price then
-                    state.price = price
-                    invalidate()
+                if Tool and Tool:GetAttribute("RechargeProp") == "Battery" and Tool:GetAttribute("Durability") < Tool:GetAttribute("DurabilityMax") then
+                    ToolHasNeedsBattery = Tool
                 end
-            end,
-        })
+            end
 
-        tab:CreateDropdown({
-            Name = "Sort",
-            Options = {
-                "Relevance", "Best selling", "Newest",
-                "Price ascending", "Price descending",
-            },
-            CurrentOption = { "Relevance" },
-            MultipleOptions = false,
-            Flag = "HX_CatalogSort",
-            Callback = function(value)
-                local sort = firstOption(value) or "Relevance"
-                if sort ~= state.sort then
-                    state.sort = sort
-                    invalidate()
+            if (BatteryPack and BatteryPack:GetAttribute("Durability") < BatteryPack:GetAttribute("DurabilityMax")) or ToolHasNeedsBattery then
+                if (Loot.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < Loot.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+
+                    if ToolHasNeedsBattery and ToolHasNeedsBattery.Parent ~= LocalPlayer.Character then
+                        ToolHasNeedsBattery.Parent = LocalPlayer.Character
+                    end
+
+                    fireproximityprompt(Loot.ModulePrompt)
                 end
-            end,
-        })
+            end
+
+        end
+    end
+end
+
+function Esp(Parent, TextAdornee, Text, Color, OutlineColor)
+    local BillboardGui = Instance.new("BillboardGui", Parent)
+    local TextLabel = Instance.new("TextLabel", BillboardGui)
+    local Highlight = Instance.new("Highlight", Parent)
+
+    BillboardGui.Adornee = TextAdornee
+    BillboardGui.AlwaysOnTop = true
+    BillboardGui.Name = "_LOLHAXBG"
+    BillboardGui.Size = UDim2.fromScale(1, 1)
+    BillboardGui.Enabled = true
+
+    Highlight.Name = "_LOLHAXHL"
+
+    TextLabel.Size = UDim2.fromScale(1, 1)
+    TextLabel.TextStrokeTransparency = 0
+    TextLabel.Font = Enum.Font[Options.ESPS_Font.Value]
+    TextLabel.TextSize = Options.ESPS_FontSize.Value
+    TextLabel.TextColor3 = Color
+    TextLabel.BackgroundTransparency = 1
+
+    Highlight.Adornee = Parent
+
+    Highlight.FillColor = Color
+    Highlight.OutlineColor = OutlineColor or Color
+
+    TextLabel.TextTransparency = 1
+    Highlight.FillTransparency = 1
+    Highlight.OutlineTransparency = 1
+
+    TextLabel:SetAttribute("Text", Text)
+
+    task.spawn(function()
+        while Parent and not Library.Unloaded and task.wait() do
+            local Distance = (workspace.CurrentCamera.CFrame.Position - Parent:GetPivot().Position).Magnitude
+
+            TextLabel.Text = Text.."\n[ "..string.format(Distance <= 9.9 and "%.1f" or "%.0f", Distance).." ]"
+        end
+    end)
+
+    game:GetService("TweenService"):Create( Highlight, TweenInfo.new( Options.ESPS_FadeTime.Value ), { FillTransparency = Options.ESPS_FillTransparency.Value } ):Play()
+    game:GetService("TweenService"):Create( Highlight, TweenInfo.new( Options.ESPS_FadeTime.Value ), { OutlineTransparency = Options.ESPS_OutlineTransparency.Value } ):Play()
+    game:GetService("TweenService"):Create( TextLabel, TweenInfo.new( Options.ESPS_FadeTime.Value ), { TextTransparency = 0 } ):Play()
+
+    return Highlight, TextLabel
+end
+
+function EspUpdate()
+    for _, Table in EspTable.Interactables do
+
+        for i, v in Table do
+            print(i, unpack(v))
+        end
+
+    end
+    for i, v in EspTable.Entities do
+
+        print(i, unpack(v))
+
+    end
+end
+
+function RemoveEspSmoothNoanim(Parent)
+    for _, x in Parent:GetChildren() do
+        if x.Name == "_LOLHAXBG" then
+            x:Destroy()
+        elseif x.Name == "_LOLHAXHL" then
+            x:Destroy()
+        end
+    end
+end
+function RemoveEspSmooth(Parent)
+    for _, x in Parent:GetChildren() do
+        if x.Name == "_LOLHAXBG" then
+            game:GetService("TweenService"):Create( x.TextLabel, TweenInfo.new(1), { TextTransparency = 1 } ):Play()
+
+            task.delay(Options.ESPS_FadeTime.Value, function()
+                x:Destroy()
+            end)
+        elseif x.Name == "_LOLHAXHL" then
+            game:GetService("TweenService"):Create( x, TweenInfo.new( Options.ESPS_FadeTime.Value ), { FillTransparency = 1 } ):Play()
+            game:GetService("TweenService"):Create( x, TweenInfo.new( Options.ESPS_FadeTime.Value ), { OutlineTransparency = 1 } ):Play()
+
+            task.delay(Options.ESPS_FadeTime.Value, function()
+                x:Destroy()
+            end)
+        end
+    end
+end
+
+function SolveAnchor(Code, Offset)
+    local Result = ""
+
+    local NumberTable = {}
+    table.insert(NumberTable, 1, string.sub(tostring(Code), 1, 1))
+    table.insert(NumberTable, 2, string.sub(tostring(Code), 2, 2))
+    table.insert(NumberTable, 3, string.sub(tostring(Code), 3, 3))
+
+    for i ,Number in NumberTable do
+        Number += Offset
+
+        if Number > 9 then
+            Number -= 10
+        elseif Number < 0 then
+            Number += 10
+        end
+
+        NumberTable[i] = Number
     end
 
-    state.status = tab:CreateParagraph({
-        Title = "Status",
-        Content = "Ready. Searches are manual; requests share one queue.",
-    })
+    for _, Number in NumberTable do
+        Result = Result..Number
+    end
 
-    state.results = tab:CreateDropdown({
-        Name = "Results",
-        Options = { "No results loaded" },
-        CurrentOption = { "No results loaded" },
-        MultipleOptions = false,
-        Flag = isCatalog and "HX_CatalogResults" or "HX_StoreResults",
-        Callback = function(value)
-            local item = state.lookup[firstOption(value)]
-            if not item then
-                return
+    return Result
+end
+
+-- Code vvv
+
+local CameraAdded = workspace.CurrentCamera.ChildAdded:Connect(function(v)
+
+    if v.Name == "Screech" then
+        if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Screech"] then
+            Notify("Entity 'Screech' has spawned!", "Look around and look at it quickly!")
+        end
+    elseif v.Name == "LiveSanity" then
+        task.delay(0.2, function()
+
+            if workspace:FindFirstChild("EntityModel") then
+                v.Enabled = not Toggles.VR_NoHasteEffect.Value
             end
-            state.selected = item
-            local copied = copy(item.id)
-            setStatus(state, ("Selected %s [%s]. %s"):format(
-                item.name, tostring(item.id),
-                copied and "ID copied." or "ID not copied."
-            ))
-        end,
-    })
 
-    local function searchPage(reset)
-        if state.loading or not alive then
-            return
+        end)
+    end
+
+end)
+
+
+local Connections = {
+    game:GetService("RunService").RenderStepped:Connect(function()
+        if not (LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character:FindFirstChild("Collision")) then return end
+        if Toggles.Spamtoolz.Value and Options.Spamtoolz_X:GetState() then
+            task.wait()
+            for _,Player in pairs(game.Players:GetPlayers()) do
+                if Player ~= LocalPlayer and Player and not table.find(friendz, Player.Name) then
+                    for _,v in pairs(Player.Backpack:GetChildren()) do
+                        if v.Name ~= "Candle" and v:FindFirstChildWhichIsA("RemoteEvent") then
+                            v:FindFirstChildWhichIsA("RemoteEvent"):FireServer()
+                        end
+                    end
+                    local Tool = Player.Character:FindFirstChildWhichIsA("Tool")
+                    if Tool and Tool.Name ~= "Candle" and Tool:FindFirstChild("Remote") then
+                        Tool.Remote:FireServer()
+                    end
+                end
+            end
         end
-        if reset then
-            state.page = 1
-            state.cursors = {}
+        -- slightly modified v2 code yea!
+        if Toggles.EB_ACManipulate.Value and Options.EB_ACManipulate_K:GetState() then
+            LocalPlayer.Character:PivotTo(LocalPlayer.Character:GetPivot() + workspace.CurrentCamera.CFrame.LookVector * Vector3.new(1, 0, 1) * -100)
+        end
+        if Main_Game then
+            if Options.VV_FieldOfView.Value ~= 0 then
+                Main_Game.fovtarget = Options.VV_FieldOfView.Value
+            end
+
+            if Toggles.VV_NoCamShake.Value then
+                Main_Game.csgo = CFrame.new()
+            end
+
+            if Toggles.VV_Thirdperson.Value and Options.VV_Thirdperson_K:GetState() then
+                Main_Game.tooloffset = Vector3.new(0,-(1 / 3),0)
+            elseif Toggles.VV_ViewmodelOffset.Value then
+                Main_Game.tooloffset = Vector3.new(Options.VV_ViewmodelOffset_X.Value, Options.VV_ViewmodelOffset_Y.Value, Options.VV_ViewmodelOffset_Z.Value)
+            else
+                local Tool = LocalPlayer.Character:FindFirstChildWhichIsA("Tool")
+
+                if Tool then
+                    if Tool:GetAttribute("ToolOffset") then
+                        if Main_Game.tooloffset ~= Tool:GetAttribute("ToolOffset") then
+                            Main_Game.tooloffset = Tool:GetAttribute("ToolOffset")
+                        end
+                    else
+                        Main_Game.tooloffset = Vector3.zero
+                    end
+                end
+            end
         end
 
-        state.token += 1
-        local token, page = state.token, state.page
-        local query = state.query:match("^%s*(.-)%s*$")
-        local category, price, sort = state.category, state.price, state.sort
-        local cursor = state.cursors[page]
+        if Toggles.GA_EatCandies.Value and Options.GA_EatCandies_K:GetState() then
+            local Candy = LocalPlayer.Backpack:FindFirstChild("Candy")
 
-        state.loading = true
-        state.selected = nil
-        state.hasNext = false
-        state.nextCursor = nil
-        state.lookup = {}
-        state.results:Refresh({ "Loading..." })
-        setStatus(state, "Loading page " .. page .. "...")
+            if Candy and Candy:FindFirstChild("Remote") and not Candy:FindFirstChild("Meshes/DOORS_EvilCandy_Cube", true) then
+                Candy.Parent = LocalPlayer.Character
+			end
 
-        task.spawn(function()
-            local ok, err = pcall(function()
-                local items = {}
-                local nextCursor, code, data
-                local hasNext = false
+            if LocalPlayer.Character:FindFirstChild("Candy") and LocalPlayer.Character.Candy:FindFirstChild("Remote") and not LocalPlayer.Character.Candy:FindFirstChild("Meshes/DOORS_EvilCandy_Cube", true) then
+				LocalPlayer.Character.Candy.Remote:FireServer()
+			end
+		end
 
-                if isCatalog then
-                    local filter = findNamed(catalogCategories, category)
-                    local url = "https://catalog.roblox.com/v1/search/items/details"
-                        .. "?Limit=30&SalesTypeFilter=1"
-                        .. "&Keyword=" .. HttpService:UrlEncode(query)
+        if not LocalPlayer.Character:GetAttribute("Hiding") then
+            if workspace:FindFirstChild("Eyes") and Toggles.ES_AntiEyes.Value then
+                for _, v in workspace:GetChildren() do
+                    if v.Name == "Eyes" and v:FindFirstChild("Core") and v.Core:FindFirstChild("Ambience") and v.Core.Ambience.Playing then
+                        game.ReplicatedStorage.RemotesFolder.MotorReplication:FireServer(-650)
+                        break
+                    end
+                end
+            end
+            if workspace:FindFirstChild("BackdoorLookman") and Toggles.ES_AntiLookman.Value then
+                for _, v in workspace:GetChildren() do
+                    if v.Name == "BackdoorLookman" and v:FindFirstChild("Core") and v.Core:FindFirstChild("Ambience") and v.Core.Ambience.Playing then
+                        game.ReplicatedStorage.RemotesFolder.MotorReplication:FireServer(-650)
+                        break
+                    end
+                end
+            end
+        end
 
-                    if filter.category then
-                        url ..= "&Category=" .. HttpService:UrlEncode(filter.category)
-                    end
-                    if filter.subcategory then
-                        url ..= "&Subcategory=" .. HttpService:UrlEncode(filter.subcategory)
-                    end
-                    if sortIds[sort] then
-                        url ..= "&SortType=" .. sortIds[sort]
-                    end
-                    if price == "Free" then
-                        url ..= "&MaxPrice=0"
-                    elseif price == "Paid" then
-                        url ..= "&MinPrice=1"
-                    end
-                    if cursor then
-                        url ..= "&Cursor=" .. HttpService:UrlEncode(cursor)
-                    end
+        if Toggles.GA_MinecartInteract.Value and Options.GA_MinecartInteract_K:GetState() then
+            local CurrentRoom = Rooms[ LocalPlayer:GetAttribute("CurrentRoom") ]
 
-                    data, code = getJson(url, state, token)
-                    if data then
-                        for _, entry in ipairs(data.data or {}) do
-                            if tonumber(entry.id) then
-                                local amount = entry.price
-                                if amount == nil then
-                                    amount = entry.lowestPrice
+            if CurrentRoom.Assets:FindFirstChild("MinecartSet") then
+                for _, Minecart in CurrentRoom.Assets.MinecartSet:GetChildren() do
+                    if Minecart:FindFirstChild("Cart") then
+                        if (LocalPlayer.Character.Collision.Position - Minecart.Main.Position).Magnitude < Minecart.Cart.PushPrompt.MaxActivationDistance * 2 then
+                            fireproximityprompt(Minecart.Cart.PushPrompt)
+                        end
+                    end
+                end
+            end
+            if CurrentRoom.Assets:FindFirstChild("MinecartTracks") then
+                for _, Track in CurrentRoom.Assets.MinecartTracks:GetChildren() do
+                    for _, MinecartMoving in Track.MinecartSet:GetChildren() do
+                        if MinecartMoving.Name == "MinecartMoving" then
+                            if (LocalPlayer.Character.Collision.Position - MinecartMoving.Main.Position).Magnitude < MinecartMoving.Cart.PushPrompt.MaxActivationDistance * 2 then
+                                fireproximityprompt(MinecartMoving.Cart.PushPrompt)
+                            end
+                        end
+                    end
+                end
+            end
+            for _, Sideroom in CurrentRoom:GetChildren() do
+                if Sideroom.Name == "Sideroom" and Sideroom.Assets:FindFirstChild("MinecartSet") then
+                    for _, Minecart in Sideroom.Assets.MinecartSet:GetChildren() do
+                        if Minecart:FindFirstChild("Cart") then
+                            if (LocalPlayer.Character.Collision.Position - Minecart.Main.Position).Magnitude < Minecart.Cart.PushPrompt.MaxActivationDistance * 2 then
+                                fireproximityprompt(Minecart.Cart.PushPrompt)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        if Toggles.GA_AutoInteract.Value and Options.GA_AutoInteract_K:GetState() then
+            local CurrentRoom = Rooms[ LocalPlayer:GetAttribute("CurrentRoom") ]
+
+            local Targets = {}
+
+            for _, v in CurrentRoom:GetChildren() do
+
+                if v:IsA("Folder") then
+                	if v.Name == "Assets" then
+
+                        table.insert(Targets, v)
+
+                        if v:FindFirstChild("Blockage") then
+                            table.insert(Targets, v.Blockage)
+                        end
+                        if v:FindFirstChild("Decor") and v.Decor:FindFirstChild("Folder") then
+                            table.insert(Targets, v.Decor.Folder)
+                        end
+
+                        for _, Assets in v:GetChildren() do
+                            if Assets.Name == "Alternate" and Assets:FindFirstChild("Keys") then
+
+                                for _, Root in Assets.Keys:GetChildren() do
+                                    if Root:FindFirstChild("KeyObtain") then
+
+                                        if not (HasItem("Key") or HasItem("KeyBackdoor")) then
+                                            if (Root.KeyObtain.Hitbox.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.KeyObtain.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                                fireproximityprompt(Root.KeyObtain.ModulePrompt)
+                                            end
+                                        end
+
+                                    end
                                 end
-                                items[#items + 1] = {
-                                    id = tonumber(entry.id),
-                                    name = entry.name or ("Asset " .. entry.id),
-                                    itemType = entry.itemType or "Asset",
-                                    price = priceText(amount, entry.priceStatus),
-                                }
+
+                            elseif Assets.Name == "StandardDecor" and v:IsA("Folder") then
+
+                                table.insert(Targets, Assets)
+
                             end
                         end
-                        nextCursor = data.nextPageCursor
-                        hasNext = type(nextCursor) == "string" and nextCursor ~= ""
-                    end
-                else
-                    local mode = findNamed(storeModes, category)
-                    local url = (
-                        "https://apis.roblox.com/toolbox-service/v2/assets:search"
-                        .. "?searchCategoryType=%s&query=%s&maxPageSize=30"
-                    ):format(mode.category, HttpService:UrlEncode(query))
 
-                    if cursor then
-                        url ..= "&pageToken=" .. HttpService:UrlEncode(cursor)
                     end
 
-                    data, code = getJson(url, state, token)
+                elseif v:IsA("Model") then
 
-                    if not data and (code == "400" or code == "404") then
-                        url = (
-                            "https://apis.roblox.com/toolbox-service/v1/marketplace/%d"
-                            .. "?keyword=%s&limit=30&pageNumber=%d&sortType=Relevance"
-                        ):format(mode.toolbox, HttpService:UrlEncode(query), page - 1)
+                    if v.Name == "Sideroom" and v:FindFirstChild("Assets") then 
 
-                        data, code = getJson(url, state, token)
-                        if data then
-                            for _, entry in ipairs(data.data or {}) do
-                                local asset = entry.asset or entry
-                                if tonumber(asset.id) then
-                                    items[#items + 1] = {
-                                        id = tonumber(asset.id),
-                                        name = asset.name or ("Asset " .. asset.id),
-                                        itemType = "Asset",
-                                        price = "",
-                                    }
+                        table.insert(Targets, v.Assets)
+                    
+                    elseif v.Name == "Door" and v:FindFirstChild("Lock") then -- God this is so ugly and out of place..
+                        local Item = (Options.GA_AutoInteract_Options.Value["Use Lockpick ( Doors )"] and HasItem("Lockpick")) or HasItem("Key") or LocalPlayer.Character:FindFirstChild("KeyBackdoor")
+
+                        if Item then
+                            if (v.Lock.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.Lock.UnlockPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                fireproximityprompt(v.Lock.UnlockPrompt)
+                            end
+                        end
+                    elseif v.Name == "AlarmClock" then
+
+                        if (v.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                            fireproximityprompt(v.ModulePrompt)
+                        end
+                    elseif v.Name == "PickupItem" and not HasItem("LibraryHintPaper") then
+
+                        if (v.Handle.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                            fireproximityprompt(v.ModulePrompt)
+                        end
+
+                    elseif v.Name == "LiveBreakerPolePickup" then
+
+                        local Prompt
+                        for _, ActivateEventPrompt in v:GetChildren() do
+
+                            if ActivateEventPrompt:IsA("ProximityPrompt") and ActivateEventPrompt.RequiresLineOfSight then
+                                Prompt = ActivateEventPrompt
+                            end
+
+                        end
+
+                        if (v.Base.Position - LocalPlayer.Character.Collision.Position).Magnitude < Prompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                            fireproximityprompt(Prompt)
+                        end
+
+                    elseif v.Name == "Wax_Door" and LocalPlayer.Character:FindFirstChild("SkeletonKey") then
+                  
+                    	if v.SkullLock.SkullPrompt.Enabled and (v.SkullLock.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.SkullLock.SkullPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                            fireproximityprompt(v.SkullLock.SkullPrompt)
+                        end
+
+                    elseif v.Name == "Green_Herb" and not LocalPlayer.Character:GetAttribute("HerbGreenEffect") then
+                  
+                    	if (v.Plant.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.Plant.HerbPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                            fireproximityprompt(v.Plant.HerbPrompt)
+                        end
+
+                    end
+
+                end
+            end
+
+            for _, Assets in Targets do
+                for _, Root in Assets:GetChildren() do
+                    if Root.Name == "Locker_Small" then
+
+                        if Root.Door.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                            FindLoot(Root)
+
+                        else
+                            if (Root.Door.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.Door.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                fireproximityprompt(Root.Door.ActivateEventPrompt)
+                            end
+                        end
+
+                    elseif Root.Name == "Toolbox" or Root.Name == "ChestBox" or Root.Name == "Toolshed_Small" then
+
+                        if Root.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                            FindLoot(Root)
+
+                        else
+                            if (Root.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                fireproximityprompt(Root.ActivateEventPrompt)
+                            end
+                        end
+
+                    elseif Root.Name == "Chest_Vine" then
+
+                        if Root:FindFirstChild("LootHolder") then
+
+                            FindLoot(Root)
+
+                        end
+
+                    elseif Root.Name == "ChestBoxLocked" then
+
+                        if Root.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                            FindLoot(Root)
+
+                        else
+                            if Options.GA_AutoInteract_Options.Value["Use Lockpick ( Other )"] and LocalPlayer.Character:FindFirstChild("Lockpick") and (Root.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                fireproximityprompt(Root.ActivateEventPrompt)
+                            end
+                        end
+
+                    elseif Root.Name == "OldWoodenTable" then
+
+                        FindLoot(Root)
+
+                        for _, v in Root:GetChildren() do
+                            if v.Name == "DrawerContainer" then
+                                if v.Metal.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                                    FindLoot(v)
+
+                                else
+                                    if (Root.Metal.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.Metal.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                        fireproximityprompt(v.Metal.ActivateEventPrompt)
+                                    end
                                 end
                             end
-                            hasNext = #items >= 30
                         end
-                    elseif data then
-                        for _, entry in ipairs(data.creatorStoreAssets or {}) do
-                            local asset = entry.asset
-                            if asset and tonumber(asset.id) then
-                                items[#items + 1] = {
-                                    id = tonumber(asset.id),
-                                    name = asset.name or ("Asset " .. asset.id),
-                                    itemType = "Asset",
-                                    price = "",
-                                }
+
+                    elseif Root.Name == "Dresser_Single" or Root.Name == "Dresser" or Root.Name == "Table" or Root.Name == "Library_Desk" then
+
+                        FindLoot(Root)
+
+                        for _, v in Root:GetChildren() do
+                            if v.Name == "DrawerContainer" then
+                                if v.Knobs.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                                    FindLoot(v)
+
+                                else
+                                    if (v.Knobs.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.Knobs.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                        fireproximityprompt(v.Knobs.ActivateEventPrompt)
+                                    end
+                                end
                             end
                         end
-                        nextCursor = data.nextPageToken
-                        hasNext = type(nextCursor) == "string" and nextCursor ~= ""
+
+                    elseif Root.Name == "Backdoor_Table" then
+
+                        FindLoot(Root)
+
+                        for _, v in Root:GetChildren() do
+                            if v.Name == "DrawerContainer" then
+                                if v.Knob.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                                    FindLoot(v)
+
+                                else
+                                    if (v.Knob.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.Knob.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                        fireproximityprompt(v.Knob.ActivateEventPrompt)
+                                    end
+                                end
+                            end
+                        end
+
+                    elseif Root.Name == "Rolltop_Desk" then
+
+                        FindLoot(Root)
+
+                        for _, v in Root:GetChildren() do
+                            if v.Name == "DrawerContainer" then
+
+                                if v.Knobs.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                                    FindLoot(v)
+
+                                else
+                                    if (v.Knobs.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.Knobs.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                        fireproximityprompt(v.Knobs.ActivateEventPrompt)
+                                    end
+                                end
+
+                            elseif v.Name == "RolltopContainer" then
+
+                                if v.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                                    FindLoot(v)
+
+                                else
+                                    if (v.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < v.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                        fireproximityprompt(v.ActivateEventPrompt)
+                                    end
+                                end
+
+                            end
+                        end
+
+                    elseif Root.Name == "KeyObtain" or Root.Name == "ElectricalKeyObtain" then
+
+                        if not (HasItem("Key") or HasItem("KeyBackdoor") or HasItem("KeyElectrical")) then
+                            if (Root.Hitbox.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.ModulePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                fireproximityprompt(Root.ModulePrompt)
+                            end
+                        end
+
+                    elseif Root.Name == "MinesGenerator" then
+                        local Fuse = HasItem("GeneratorFuse")
+
+                        for _, FuseInput in Root.Fuses:GetChildren() do
+                            if FuseInput:FindFirstChild("FusesPrompt") then
+                                if Fuse and (FuseInput.Fuse.Position - LocalPlayer.Character.Collision.Position).Magnitude < FuseInput.FusesPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                    fireproximityprompt(FuseInput.FusesPrompt)
+                                end
+
+                                break
+                            end
+                        end
+
+                        if Root.Lever.LeverPrompt.Enabled and (Root.Lever.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.Lever.LeverPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                            fireproximityprompt(Root.Lever.LeverPrompt)
+                        end
+                    
+                    elseif Root.Name == "MinesGateButton" then
+
+                        if Root.Light.Transparency < 1 then
+                            if (Root.Button.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.Button.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                fireproximityprompt(Root.Button.ActivateEventPrompt)
+                            end
+                        end
+
+                    elseif Root.Name == "LeverForGate" then
+
+                        if not Root.ActivateEventPrompt:GetAttribute("Interactions") then
+                            if (Root.Main.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                fireproximityprompt(Root.ActivateEventPrompt)
+                            end
+                        end
+
+                    elseif Root.Name == "VentGrate" then
+
+                        if Root.AwesomePrompt.Enabled then
+                            if (Root.SquareGrate.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.AwesomePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                fireproximityprompt(Root.AwesomePrompt)
+                            end
+                        end
+
+                    elseif Root.Name == "Modular_Bookshelf" and Root:FindFirstChild("LiveHintBook") then
+
+                        if (Root.LiveHintBook.Base.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.LiveHintBook.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                            fireproximityprompt(Root.LiveHintBook.ActivateEventPrompt)
+                        end
+
+                    elseif Root.Name == "TimerLever" and not Root.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                        if (Root.Hitbox.Position - LocalPlayer.Character.Collision.Position).Magnitude < Root.ActivateEventPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                            fireproximityprompt(Root.ActivateEventPrompt)
+                        end
+
+                    elseif Root.Name == "RoomsLootItem" or Root.Name == "CrucifixOnTheWall" then
+
+                        FindLoot(Root)
+
+                    end
+                end
+            end
+
+            if CurrentRoom:FindFirstChild("_DamHandler") then
+
+                for _, Flood in CurrentRoom._DamHandler:GetChildren() do
+                    if Flood.Name:sub(1, 5) == "Flood" then
+
+                        for _, WaterPump in Flood.Pumps:GetChildren() do
+                            if WaterPump.Wheel.ValvePrompt.Enabled and (WaterPump.Wheel.Position - LocalPlayer.Character.Collision.Position).Magnitude < WaterPump.Wheel.ValvePrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                                fireproximityprompt(WaterPump.Wheel.ValvePrompt)
+                            end
+                        end
+
                     end
                 end
 
-                if not current(state, token) then
+            end
+
+            if CurrentRoom:FindFirstChild("ElectricalDoor") then
+                local ElectricalKey = HasItem("KeyElectrical")
+
+                if CurrentRoom.ElectricalDoor.Door.Lock.UnlockPrompt.Enabled and ElectricalKey then
+                    ElectricalKey.Parent = LocalPlayer.Character
+
+                    if (CurrentRoom.ElectricalDoor.Door.Lock.Position - LocalPlayer.Character.Collision.Position).Magnitude < CurrentRoom.ElectricalDoor.Door.Lock.UnlockPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                        fireproximityprompt(CurrentRoom.ElectricalDoor.Door.Lock.UnlockPrompt)
+                    end
+
+                end
+            end
+
+            if CurrentRoom:FindFirstChild("RoomsDoor_Entrance") then
+                local Lockpick = Options.GA_AutoInteract_Options.Value["Use Lockpick ( Other )"] and HasItem("Lockpick")
+                local SkeletonKey = HasItem("SkeletonKey")
+
+                if CurrentRoom.RoomsDoor_Entrance.Chain1.Lock1.ThingToEnable.Enabled and Lockpick then
+
+                    if (CurrentRoom.RoomsDoor_Entrance.Chain1.Lock1.Position - LocalPlayer.Character.Collision.Position).Magnitude < CurrentRoom.RoomsDoor_Entrance.Chain1.Lock1.ThingToEnable.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                        Lockpick.Parent = LocalPlayer.Character
+                        fireproximityprompt(CurrentRoom.RoomsDoor_Entrance.Chain1.Lock1.ThingToEnable)
+                    end
+
+                elseif CurrentRoom.RoomsDoor_Entrance.Chain2.Lock2.LockPrompt.Enabled and Lockpick then
+
+                    if (CurrentRoom.RoomsDoor_Entrance.Chain2.Lock2.Position - LocalPlayer.Character.Collision.Position).Magnitude < CurrentRoom.RoomsDoor_Entrance.Chain2.Lock2.LockPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                        Lockpick.Parent = LocalPlayer.Character
+                        fireproximityprompt(CurrentRoom.RoomsDoor_Entrance.Chain2.Lock2.LockPrompt)
+                    end
+
+                elseif CurrentRoom.RoomsDoor_Entrance.SkullLock.SkullPrompt.Enabled and SkeletonKey then
+
+                    if (CurrentRoom.RoomsDoor_Entrance.SkullLock.Position - LocalPlayer.Character.Collision.Position).Magnitude < CurrentRoom.RoomsDoor_Entrance.SkullLock.SkullPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                        SkeletonKey.Parent = LocalPlayer.Character
+                        fireproximityprompt(CurrentRoom.RoomsDoor_Entrance.SkullLock.SkullPrompt)
+                    end
+
+                elseif CurrentRoom.RoomsDoor_Entrance.Door.EnterPrompt.Enabled then
+
+                    if (CurrentRoom.RoomsDoor_Entrance.Door.Position - LocalPlayer.Character.Collision.Position).Magnitude < CurrentRoom.RoomsDoor_Entrance.Door.EnterPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                        fireproximityprompt(CurrentRoom.RoomsDoor_Entrance.Door.EnterPrompt)
+                    end
+
+                end
+            end
+
+            local DoorExit = CurrentRoom:FindFirstChild("Backdoors_Exit") or CurrentRoom:FindFirstChild("RoomsDoor_Exit")
+            if DoorExit then
+
+                if (DoorExit.Door.Position - LocalPlayer.Character.Collision.Position).Magnitude < DoorExit.Door.EnterPrompt.MaxActivationDistance * Options.GA_AutoInteract_Range.Value then
+                    fireproximityprompt(DoorExit.Door.EnterPrompt)
+                end
+
+            end
+
+            FindLoot(workspace.Drops)
+        end
+
+        if PadlockCode and Toggles.GA_AutoPadlockSolve.Value and LocalPlayer:GetAttribute("CurrentRoom") <= 51 then
+            local Padlock = workspace.CurrentRooms["50"].Door:FindFirstChild("Padlock")
+
+            if Padlock then
+                if (LocalPlayer.Character.Collision.Position - Padlock.Main.Position).Magnitude < Options.GA_AutoPadlockSolve_Distance.Value then
+                    game.ReplicatedStorage.RemotesFolder.PL:FireServer(PadlockCode)
+                end
+            end
+        end
+
+        if Toggles.MM_Walkspeed.Value then
+            LocalPlayer.Character.Humanoid.WalkSpeed = Options.MM_Walkspeed_S.Value + (LocalPlayer.Character:GetAttribute("Climbing") and Options.MM_Walkspeed_Boost.Value or 0) + LocalPlayer.Character:GetAttribute("SpeedBoost") + LocalPlayer.Character:GetAttribute("SpeedBoostBehind") + LocalPlayer.Character:GetAttribute("SpeedBoostExtra")
+        end
+
+        local Shade = not workspace.CurrentCamera:FindFirstChild("Shade")
+        local Haste = not workspace.CurrentCamera:FindFirstChild("EntityModel")
+
+        LocalPlayer.PlayerGui.MainUI.Jumpscare.Jumpscare_Shade.Visible = not (Toggles.VR_NoHaltEffect.Value or Shade)
+        LocalPlayer.PlayerGui.MainUI.MainFrame.DreadVignette.Visible = not (Toggles.VR_NoHasteEffect.Value or Haste)
+        LocalPlayer.Character.HumanoidRootPart.CustomPhysicalProperties = (Toggles.MM_NoAcceleration.Value and PhysicalProperties.new(100, 0.7, 0, 1, 1) or OldAccel)
+    end),
+
+    -- this is fucked.
+    LocalPlayer.Character:GetAttributeChangedSignal("CanJump"):Connect(function()
+        LocalPlayer.Character:SetAttribute("CanJump", Toggles.ES_AlwaysJump.Value or CanJump)     
+
+        if not Toggles.ES_AlwaysJump.Value then
+            CanJump = LocalPlayer.Character:GetAttribute("CanJump")
+        end
+    end),
+
+    LocalPlayer.CharacterAdded:Connect(function(v)
+        v:WaitForChild("Collision", 9e9)
+
+        ClonedCollision = v.Collision:Clone()
+        ClonedCollision.Parent = v
+
+        ClonedCollision.Name = "_CollisionClone"
+        ClonedCollision.Massless = true
+        ClonedCollision.CanCollide = false
+        ClonedCollision.CanQuery = false
+        ClonedCollision.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.7, 0, 1, 1)
+        ClonedCollision.CollisionCrouch:Destroy()
+    end),
+
+    LocalPlayer.PlayerGui.ChildAdded:Connect(function(v)
+        if v.Name == "MainUI" then
+            v:WaitForChild("Initiator",9e9):WaitForChild("Main_Game",9e9):WaitForChild("RemoteListener",9e9):WaitForChild("Modules",9e9)
+            v:WaitForChild("MainFrame",9e9):WaitForChild("HideVignette",9e9)
+            v.Initiator.Main_Game:WaitForChild("Health",9e9):WaitForChild("Jam",9e9)
+            v.Initiator.Main_Game:WaitForChild("PromptService",9e9):WaitForChild("Triggered",9e9)
+
+            Main_Game = require(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game)
+
+            A90Hook = hookfunction(require(v.Initiator.Main_Game.RemoteListener.Modules.A90), function(...)
+                if Toggles.ER_NoA90.Value then
+                    game.ReplicatedStorage.RemotesFolder.A90:FireServer("didnt")
                     return
                 end
-                state.loading = false
-                state.nextCursor = nextCursor
-                state.hasNext = hasNext
 
-                local options = {}
-                for index, item in ipairs(items) do
-                    local option = ("%02d | %s | %s | ID %s"):format(
-                        index, item.name, item.price, tostring(item.id)
-                    )
-                    options[#options + 1] = option
-                    state.lookup[option] = item
+                return A90Hook(...)
+            end)
+            ScreechHook = hookfunction(require(v.Initiator.Main_Game.RemoteListener.Modules.Screech), function(...)
+                if Toggles.ER_NoScreech.Value then
+                    game.ReplicatedStorage.RemotesFolder.Screech:FireServer(true)
+                    return
                 end
 
-                if #options == 0 then
-                    state.results:Refresh({ "No results" })
-                    setStatus(state, ("Page %d: no results; HTTP %s."):format(
-                        page, tostring(code)
-                    ))
-                else
-                    state.results:Refresh(options)
-                    setStatus(state, ("Page %d: %d results. Select one to copy its ID.")
-                        :format(page, #options))
+                return ScreechHook(...)
+            end)
+            TimothyHook = hookfunction(require(v.Initiator.Main_Game.RemoteListener.Modules.SpiderJumpscare), function(...)
+                if Toggles.VR_TimothyJumpscare.Value then
+                    return
                 end
+
+                return TimothyHook(...)
             end)
 
-            if not ok and current(state, token) then
-                state.loading = false
-                setStatus(state, "Search error: " .. tostring(err))
-                warn("[haxbey engine] Search error: " .. tostring(err))
-            end
-        end)
-    end
+            local Jammin = not game.ReplicatedStorage.LiveModifiers:FindFirstChild("Jammin")
+            v.Initiator.Main_Game.Health.Jam.Playing = not (Toggles.MA_SilentJammin.Value or Jammin)
+            v.MainFrame.HideVignette.Image = (Toggles.VR_NoHidingVignette.Value and "rbxassetid://0" or "rbxassetid://6100076320")
+            v.Initiator.Main_Game.PromptService.Triggered.Volume = (Toggles.MA_SilentInteracting.Value and 0 or 0.04)
 
-    tab:CreateButton({
-        Name = "Search",
-        Callback = function()
-            searchPage(true)
-        end,
-    })
-    tab:CreateButton({
-        Name = "Previous page",
-        Callback = function()
-            if not state.loading and state.page > 1 then
-                state.page -= 1
-                searchPage(false)
-            end
-        end,
-    })
-    tab:CreateButton({
-        Name = "Next page",
-        Callback = function()
-            if state.loading or not state.hasNext then
-                return
-            end
-            state.cursors[state.page + 1] = state.nextCursor
-            state.page += 1
-            searchPage(false)
-        end,
-    })
-    tab:CreateButton({
-        Name = "Copy selected ID",
-        Callback = function()
-            if state.selected then
-                copy(state.selected.id)
-            else
-                notify("No selection", "Select a search result first.")
-            end
-        end,
-    })
-    tab:CreateButton({
-        Name = "Get / Buy selected",
-        Callback = function()
-            local selected = state.selected
-            if not selected then
-                notify("No selection", "Select a search result first.")
-                return
-            end
-            local ok, err = pcall(function()
-                if selected.itemType == "Bundle" then
-                    MarketplaceService:PromptBundlePurchase(lp, selected.id)
-                else
-                    MarketplaceService:PromptPurchase(lp, selected.id)
-                end
-            end)
-            if not ok then
-                notify("Purchase prompt unavailable", tostring(err))
-            end
-        end,
-    })
-end
-
-makeBrowser(Tabs.Catalog, true)
-makeBrowser(Tabs.Store, false)
-
----------------------------------------------------------------- SETTINGS
-
-Tabs.Settings:CreateSection("Overlay settings")
-slider(Tabs.Settings, "ESP range", "MaxDistance", 100, 5000, 50, "studs")
-slider(Tabs.Settings, "Counter radius", "CountRadius", 50, 2000, 50, "studs")
-
-local kickDeadline = 0
-Tabs.Settings:CreateButton({
-    Name = "Kick myself (press twice within 3 seconds)",
-    Callback = function()
-        if os.clock() <= kickDeadline then
-            lp:Kick(Config.KickMessage)
-        else
-            kickDeadline = os.clock() + 3
-            notify("Confirm kick", "Press the same button again within 3 seconds.")
+            task.wait(0.5)
+            Main_Game.spring.Speed = (Toggles.VV_NoLookBob.Value and 9e9 or 8)
         end
-    end,
-})
-Tabs.Settings:CreateButton({
-    Name = "Unload haxbey engine",
-    Callback = unload,
-})
-Tabs.Settings:CreateParagraph({
-    Title = "Controls",
-    Content = "RightShift: menu. End: unload. "
-        .. "Everything starts disabled. Not run or tested.",
-})
+    end),
 
----------------------------------------------------------------- ESP OBJECTS
+    workspace.Terrain.ChildAdded:Connect(function(v)
+        task.wait()
 
-local R15 = {
-    { "Head", "UpperTorso" },
-    { "UpperTorso", "LowerTorso" },
-    { "UpperTorso", "LeftUpperArm" },
-    { "LeftUpperArm", "LeftLowerArm" },
-    { "LeftLowerArm", "LeftHand" },
-    { "UpperTorso", "RightUpperArm" },
-    { "RightUpperArm", "RightLowerArm" },
-    { "RightLowerArm", "RightHand" },
-    { "LowerTorso", "LeftUpperLeg" },
-    { "LeftUpperLeg", "LeftLowerLeg" },
-    { "LeftLowerLeg", "LeftFoot" },
-    { "LowerTorso", "RightUpperLeg" },
-    { "RightUpperLeg", "RightLowerLeg" },
-    { "RightLowerLeg", "RightFoot" },
-}
-local R6 = {
-    { "Head", "Torso" },
-    { "Torso", "Left Arm" },
-    { "Torso", "Right Arm" },
-    { "Torso", "Left Leg" },
-    { "Torso", "Right Leg" },
-}
-
-local fovCircle = draw("Circle", {
-    Radius = Config.AimFov,
-    Filled = false,
-    Thickness = 1.5,
-    Color = Color3.new(1, 1, 1),
-    Visible = false,
-    NumSides = 64,
-})
-
-local function newESP()
-    local object = { corners = {}, bones = {} }
-    for i = 1, 8 do
-        object.corners[i] = draw("Line", {
-            Thickness = 1.5, Color = Config.BoxColor, Visible = false,
-        })
-    end
-    for i = 1, #R15 do
-        object.bones[i] = draw("Line", {
-            Thickness = 1.5, Visible = false,
-        })
-    end
-    object.hpBack = draw("Line", {
-        Thickness = 4, Color = Color3.new(), Visible = false,
-    })
-    object.hpBar = draw("Line", {
-        Thickness = 2, Color = Color3.new(0, 1, 0), Visible = false,
-    })
-    object.dot = draw("Circle", {
-        Radius = 3, Filled = true, NumSides = 12, Visible = false,
-    })
-    object.holder = instance("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0),
-        Size = UDim2.fromOffset(220, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        Visible = false,
-    }, overlay)
-    instance("UIListLayout", {
-        SortOrder = Enum.SortOrder.LayoutOrder,
-    }, object.holder)
-
-    local function row(order, color)
-        local label = textLabel(object.holder, "", color, Config.TextSize)
-        label.LayoutOrder = order
-        label.Size = UDim2.new(1, 0, 0, Config.TextSize + 2)
-        return label
-    end
-    object.name = row(1, Config.NameColor)
-    object.item = row(2, Config.ItemColor)
-    object.dist = row(3, Config.DistColor)
-    return object
-end
-
-local function hideESP(object)
-    for _, line in ipairs(object.corners) do
-        line.Visible = false
-    end
-    for _, line in ipairs(object.bones) do
-        line.Visible = false
-    end
-    object.hpBack.Visible = false
-    object.hpBar.Visible = false
-    object.dot.Visible = false
-    object.holder.Visible = false
-end
-
-local function untrack(player)
-    local object = tracked[player]
-    if not object then
-        return
-    end
-    tracked[player] = nil
-    for _, line in ipairs(object.corners) do
-        removeDrawing(line)
-    end
-    for _, line in ipairs(object.bones) do
-        removeDrawing(line)
-    end
-    removeDrawing(object.hpBack)
-    removeDrawing(object.hpBar)
-    removeDrawing(object.dot)
-    object.holder:Destroy()
-end
-
-local function track(player)
-    if alive and player ~= lp and not tracked[player] then
-        tracked[player] = newESP()
-    end
-end
-
-for _, player in ipairs(Players:GetPlayers()) do
-    track(player)
-end
-connect(Players.PlayerAdded, track)
-connect(Players.PlayerRemoving, untrack)
-
----------------------------------------------------------------- REMOTE INDEX LIFECYCLE
-
-connect(game.DescendantAdded, function(object)
-    if isRemote(object) then
-        Snap.registry[object] = true
-        queueSnapRefresh()
-    end
-end)
-
-connect(game.DescendantRemoving, function(object)
-    if Snap.registry[object] or Snap.matches[object] then
-        Snap.registry[object] = nil
-        Snap.matches[object] = nil
-        restoreRemoteListeners(object)
-        queueSnapRefresh()
-    end
-end)
-
-scanAllRemotes()
-
----------------------------------------------------------------- HELPERS
-
-local rayParams = RaycastParams.new()
-rayParams.FilterType = Enum.RaycastFilterType.Exclude
-rayParams.IgnoreWater = true
-
-local warningRay = RaycastParams.new()
-warningRay.FilterType = Enum.RaycastFilterType.Exclude
-warningRay.IgnoreWater = true
-
-local function sameTeam(player)
-    return Config.TeamCheck and player.Team ~= nil
-        and lp.Team ~= nil and player.Team == lp.Team
-end
-
-local function visible(character, part)
-    local origin = cam.CFrame.Position
-    local result = workspace:Raycast(origin, part.Position - origin, rayParams)
-    return not result or result.Instance:IsDescendantOf(character)
-end
-
-local function project(position)
-    local point, onScreen = cam:WorldToViewportPoint(position)
-    return Vector2.new(point.X, point.Y), point.Z > 0, onScreen
-end
-
-local function scan(myCharacter, myRoot)
-    if not myRoot then
-        return 0, false
-    end
-    local count, aiming = 0, false
-    local cosLimit = math.cos(math.rad(Config.WarnAngleDeg))
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= lp and not sameTeam(player) then
-            local character = player.Character
-            local head = character and character:FindFirstChild("Head")
-            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-            if head and humanoid and humanoid.Health > 0 then
-                local delta = myRoot.Position - head.Position
-                local distance = delta.Magnitude
-                if distance <= Config.CountRadius then
-                    count += 1
-                end
-                if not aiming and distance > 0.1
-                    and distance <= Config.WarnMaxDist
-                    and head.CFrame.LookVector:Dot(delta.Unit) >= cosLimit
-                then
-                    if not Config.WarnNeedLOS then
-                        aiming = true
-                    else
-                        warningRay.FilterDescendantsInstances = { character }
-                        local hit = workspace:Raycast(head.Position, delta, warningRay)
-                        aiming = not hit or (
-                            myCharacter ~= nil
-                            and hit.Instance:IsDescendantOf(myCharacter)
-                        )
-                    end
-                end
-            end
+        if Toggles.MA_NoRandomAmbience.Value and v:IsA("Attachment") then
+            v:Destroy()
         end
-    end
-    return count, aiming
-end
+    end),
 
----------------------------------------------------------------- CHARACTER MODIFICATIONS
+    Rooms.ChildAdded:Connect(function(v)
+        repeat task.wait() until v:GetAttribute("RawName")
 
-local function saveProperty(object, property, value)
-    local bucket = savedProperties[object]
-    if not bucket then
-        bucket = {}
-        savedProperties[object] = bucket
-    end
-    if bucket[property] == nil then
-        bucket[property] = object[property]
-    end
-    object[property] = value
-end
-
-local function restoreProperty(object, property)
-    local bucket = savedProperties[object]
-    if bucket and bucket[property] ~= nil then
-        local previous = bucket[property]
-        bucket[property] = nil
-        pcall(function()
-            object[property] = previous
-        end)
-        if next(bucket) == nil then
-            savedProperties[object] = nil
+        if v:GetAttribute("RawName") == "HaltHallway" and Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Halt"] then
+            Notify("Entity 'Halt' spawns in the next room!", "...")
         end
-    end
-end
+    end),
 
-local function characterTick()
-    local character = lp.Character
-    if character ~= lastCharacter then
-        restoreAllProperties()
-        lastCharacter = character
-    end
-
-    if Config.GravOn then
-        if originalGravity == nil then
-            originalGravity = workspace.Gravity
-        end
-        workspace.Gravity = Config.Grav
-    elseif originalGravity ~= nil then
-        workspace.Gravity = originalGravity
-        originalGravity = nil
-    end
-
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then
-        return
-    end
-
-    if Config.SpeedOn then
-        saveProperty(humanoid, "WalkSpeed", Config.Speed)
-    else
-        restoreProperty(humanoid, "WalkSpeed")
-    end
-
-    if Config.JumpOn then
-        saveProperty(humanoid, "UseJumpPower", true)
-        saveProperty(humanoid, "JumpPower", Config.Jump)
-    else
-        restoreProperty(humanoid, "JumpPower")
-        restoreProperty(humanoid, "UseJumpPower")
-    end
-
-    local head = character:FindFirstChild("Head")
-    local headScale = humanoid:FindFirstChild("HeadScale")
-    if Config.HeadOn and head then
-        if headScale then
-            restoreProperty(head, "Size")
-            saveProperty(headScale, "Value", Config.Head)
-        else
-            local bucket = savedProperties[head]
-            local original = bucket and bucket.Size or head.Size
-            saveProperty(head, "Size", original * Config.Head)
-        end
-    else
-        if headScale then
-            restoreProperty(headScale, "Value")
-        end
-        if head then
-            restoreProperty(head, "Size")
-        end
-    end
-
-    if Config.TransOn then
-        for _, object in ipairs(character:GetDescendants()) do
-            if (object:IsA("BasePart") and object.Name ~= "HumanoidRootPart")
-                or object:IsA("Decal")
-            then
-                if changedTransparency[object] == nil then
-                    changedTransparency[object] = object.Transparency
-                end
-                object.Transparency = Config.Trans
-            end
-        end
-    else
-        for object, value in pairs(changedTransparency) do
-            pcall(function()
-                object.Transparency = value
-            end)
-        end
-        changedTransparency = {}
-    end
-end
-
-local characterTimer = 0
-connect(RunService.Heartbeat, function(dt)
-    if not alive then
-        return
-    end
-
-    characterTimer += dt
-    if characterTimer >= 0.1 then
-        characterTimer = 0
-        characterTick()
-    end
-
-    Snap.timer += dt
-    if Snap.timer >= math.max(Config.SnapCheckInterval, 0.5) then
-        Snap.timer = 0
-        queueSnapRefresh()
-    end
-end)
-
----------------------------------------------------------------- MAIN LOOP
-
-local fps, fpsTimer, scanTimer = 60, 0, 0
-local cachedCount, cachedAiming = 0, false
-
-RunService:BindToRenderStep(
-    renderName,
-    Enum.RenderPriority.Camera.Value + 1,
-    function(dt)
-        if not alive then
-            return
+    game.Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
+        if game.Lighting.FogEnd ~= 9999 then
+            OldFogEnd = game.Lighting.FogEnd
         end
 
-        cam = workspace.CurrentCamera
-        if not cam then
-            fovCircle.Visible = false
-            warning.Visible = false
-            countPill.Visible = false
-            fpsPill.Visible = false
-            for _, object in pairs(tracked) do
-                hideESP(object)
-            end
-            return
+        if Toggles.VW_NoFog.Value then
+            game.Lighting.FogEnd = 9999
         end
+    end),
 
-        local myCharacter = lp.Character
-        local myRoot = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
-        rayParams.FilterDescendantsInstances = myCharacter and { myCharacter } or {}
-
-        local center = cam.ViewportSize / 2
-        fovCircle.Position = center
-        fovCircle.Radius = Config.AimFov
-        fovCircle.Visible = Config.AimEnabled and Config.ShowFov
-
-        if Config.AimEnabled and myRoot then
-            local bestPosition
-            local bestDistance = Config.AimFov
-
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= lp and not sameTeam(player) then
-                    local character = player.Character
-                    local head = character and character:FindFirstChild("Head")
-                    local root = character and character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-                    if head and root and humanoid and humanoid.Health > 0
-                        and (root.Position - myRoot.Position).Magnitude <= Config.AimDist
-                        and (not Config.VisCheck or visible(character, head))
-                    then
-                        local position = head.Position
-                        if Config.PredictionOn then
-                            position += root.AssemblyLinearVelocity * Config.PredictionVal
-                        end
-                        local screen, inFront, onScreen = project(position)
-                        local distance = (screen - center).Magnitude
-                        if inFront and onScreen and distance < bestDistance then
-                            bestDistance = distance
-                            bestPosition = position
-                        end
-                    end
-                end
-            end
-
-            if bestPosition then
-                local alpha = Config.AimSmooth <= 1 and 1
-                    or (1 - math.exp(-(22 - Config.AimSmooth) * dt))
-
-                if Config.CamLock
-                    and (bestPosition - cam.CFrame.Position).Magnitude > 0.001
-                then
-                    cam.CFrame = cam.CFrame:Lerp(
-                        CFrame.lookAt(cam.CFrame.Position, bestPosition), alpha
-                    )
-                end
-                if Config.CharLock then
-                    local horizontal = Vector3.new(
-                        bestPosition.X, myRoot.Position.Y, bestPosition.Z
-                    )
-                    if (horizontal - myRoot.Position).Magnitude > 0.001 then
-                        myRoot.CFrame = myRoot.CFrame:Lerp(
-                            CFrame.lookAt(myRoot.Position, horizontal), alpha
-                        )
-                    end
-                end
-                if Config.SilentAim then
-                    myRoot.CFrame = CFrame.new(bestPosition - Vector3.new(0, 3, 0))
-                end
-            end
+    -- heh.. 😼
+    game.Lighting:GetPropertyChangedSignal("OutdoorAmbient"):Connect(function()
+        if Toggles.VW_Ambience.Value then
+            game.Lighting.OutdoorAmbient = Options.VW_Ambience_C.Value
         end
+    end),
 
-        local anyText = Config.Name or Config.Item or Config.Dist
-        local needVisibility = Config.Bones or Config.RootDot
-        local anything = Config.Box or Config.Health or anyText or needVisibility
+    Rooms.DescendantAdded:Connect(function(v)
 
-        for player, object in pairs(tracked) do
-            local character = player.Character
-            local root = character and character:FindFirstChild("HumanoidRootPart")
-            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-            local valid = Config.Enabled and anything and myRoot and root
-                and humanoid and humanoid.Health > 0 and not sameTeam(player)
-            local distance = valid and (root.Position - myRoot.Position).Magnitude or 0
-            if valid and distance > Config.MaxDistance then
-                valid = false
-            end
+        if v:IsA("Model") then
+            if v.Name == "Door" then    
 
-            if not valid then
-                hideESP(object)
-            else
-                local cf, size = root.CFrame, Vector3.new(4, 5, 2)
-                local ok, boxCF, boxSize = pcall(character.GetBoundingBox, character)
-                if ok then
-                    cf, size = boxCF, boxSize
-                end
-                local top, topFront = project(
-                    cf.Position + Vector3.new(0, size.Y / 2, 0)
-                )
-                local bottom, bottomFront = project(
-                    cf.Position - Vector3.new(0, size.Y / 2, 0)
-                )
+                v:WaitForChild("Door", 9e9)
 
-                if not topFront or not bottomFront then
-                    hideESP(object)
-                else
-                    local height = math.abs(bottom.Y - top.Y)
-                    local width = height * 0.6
-                    local x = (top.X + bottom.X) / 2 - width / 2
-                    local y = math.min(top.Y, bottom.Y)
+                local RoomID = v:GetAttribute("RoomID")
 
-                    if Config.Box then
-                        local dx, dy = width * 0.3, height * 0.15
-                        local segments = {
-                            { x, y, x + dx, y },
-                            { x, y, x, y + dy },
-                            { x + width, y, x + width - dx, y },
-                            { x + width, y, x + width, y + dy },
-                            { x, y + height, x + dx, y + height },
-                            { x, y + height, x, y + height - dy },
-                            { x + width, y + height, x + width - dx, y + height },
-                            { x + width, y + height, x + width, y + height - dy },
-                        }
-                        for i, segment in ipairs(segments) do
-                            local line = object.corners[i]
-                            line.From = Vector2.new(segment[1], segment[2])
-                            line.To = Vector2.new(segment[3], segment[4])
-                            line.Color = Config.BoxColor
-                            line.Visible = true
-                        end
-                    else
-                        for _, line in ipairs(object.corners) do
-                            line.Visible = false
+                if RoomID then
+                    local Adornee = v.Door
+
+                    if game.ReplicatedStorage.GameData.Floor.Value == "Hotel" then
+                        if RoomID >= 50 and RoomID <= 51 then
+                        	Adornee = v
                         end
                     end
 
-                    if Config.Health then
-                        local ratio = math.clamp(
-                            humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1
-                        )
-                        local barX = x - 5
-                        object.hpBack.From = Vector2.new(barX, y + height + 1)
-                        object.hpBack.To = Vector2.new(barX, y - 1)
-                        object.hpBar.From = Vector2.new(barX, y + height)
-                        object.hpBar.To = Vector2.new(barX, y + height * (1 - ratio))
-                        object.hpBar.Color = Color3.new(1 - ratio, ratio, 0)
-                    end
-                    object.hpBack.Visible = Config.Health
-                    object.hpBar.Visible = Config.Health
-                    object.name.Visible = Config.Name
-                    object.item.Visible = Config.Item
-                    object.dist.Visible = Config.Dist
-                    object.holder.Visible = anyText
+                    local Highlight, TextLabel = Esp(Adornee, Adornee, "Door", Options.ESPI_C_Doors_F.Value, Options.ESPI_C_Doors_O.Value)
+                    table.insert(EspTable.Interactables.Doors, {Highlight, TextLabel})
 
-                    if anyText then
-                        local tool = character:FindFirstChildOfClass("Tool")
-                        object.name.Text = player.DisplayName
-                        object.item.Text = tool and tool.Name or "Nothing"
-                        object.dist.Text = ("%d studs"):format(math.floor(distance))
-                        object.holder.Position = UDim2.fromOffset(
-                            x + width / 2, y + height + 2
-                        )
-                    end
-
-                    local color = Config.HiddenColor
-                    if needVisibility then
-                        color = visible(
-                            character, character:FindFirstChild("Head") or root
-                        ) and Config.VisColor or Config.HiddenColor
-                    end
-                    object.dot.Visible = Config.RootDot
-                    if Config.RootDot then
-                        local position = project(root.Position)
-                        object.dot.Position = position
-                        object.dot.Color = color
-                    end
-
-                    local map = character:FindFirstChild("UpperTorso") and R15 or R6
-                    for i, line in ipairs(object.bones) do
-                        local pair = Config.Bones and map[i]
-                        local a = pair and character:FindFirstChild(pair[1])
-                        local b = pair and character:FindFirstChild(pair[2])
-                        if a and b then
-                            local pa, fa = project(a.Position)
-                            local pb, fb = project(b.Position)
-                            line.Visible = fa and fb
-                            if fa and fb then
-                                line.From = pa
-                                line.To = pb
-                                line.Color = color
-                            end
+                    task.delay(1, function()
+                        if v:GetAttribute("Opened") then
+                            RemoveEspSmooth(Adornee)
                         else
-                            line.Visible = false
+                            v.AttributeChanged:Once(function()
+                                RemoveEspSmooth(Adornee)
+                            end)
+                        end
+                    end)
+                end
+
+            elseif v.Name == "FuseObtain" then
+
+                v:WaitForChild("Hitbox", 9e9)
+
+                local Highlight, TextLabel = Esp(v, v, "Generator Fuse", Options.ESPI_C_GeneratorFuses_F.Value, Options.ESPI_C_GeneratorFuses_O.Value)
+                table.insert(EspTable.Interactables.GeneratorFuses, {Highlight, TextLabel})
+
+                v.Hitbox.FuseModel.Changed:Once(function()
+                    RemoveEspSmooth(v)
+                end)
+
+            elseif v.Name == "MinesGenerator" then
+
+                v:WaitForChild("GeneratorMain", 9e9)
+
+                local Highlight, TextLabel = Esp(v, v, "Generator", Options.ESPI_C_Generators_F.Value, Options.ESPI_C_Generators_O.Value)
+                table.insert(EspTable.Interactables.Generators, {Highlight, TextLabel})
+
+                v.Lever.Sound.Played:Once(function()
+                    RemoveEspSmooth(v)
+                end)
+            elseif v.Name == "KeyObtain" then
+
+                v:WaitForChild("Hitbox", 9e9)
+
+                task.delay(1, function()
+                    local Highlight, TextLabel = Esp(v, v, "Door Key", Options.ESPI_C_DoorKeys_F.Value, Options.ESPI_C_DoorKeys_O.Value)
+                    table.insert(EspTable.Interactables.DoorKeys, {Highlight, TextLabel})
+                end)
+
+            elseif v.Name == "GoldPile" then
+                v:WaitForChild("Hitbox", 9e9)
+
+                local Highlight, TextLabel = Esp(v, v, "Gold Pile [ "..v:GetAttribute("GoldValue").." ]", Options.ESPI_C_GoldPiles_F.Value, Options.ESPI_C_GoldPiles_O.Value)
+                table.insert(EspTable.Interactables.GoldPiles, {Highlight, TextLabel})
+
+            elseif v.Name == "LeverForGate" then
+
+                v:WaitForChild("Main", 9e9)
+
+                local Highlight, TextLabel = Esp(v, v.Main, "Gate Lever", Options.ESPI_C_GateLevers_F.Value, Options.ESPI_C_GateLevers_O.Value)
+                table.insert(EspTable.Interactables.GateLevers, {Highlight, TextLabel})
+
+                v:WaitForChild("ActivateEventPrompt", 9e9)
+
+                v.ActivateEventPrompt.AttributeChanged:Once(function()
+                    RemoveEspSmooth(v)
+                end)
+
+            elseif v.Name == "TimerLever" then
+
+                task.delay(1, function()
+                    if not v.Parent then return end
+
+                    v:WaitForChild("Hitbox", 9e9)
+
+                    local Highlight, TextLabel = Esp(v, v.Hitbox, "Timer Lever", Options.ESPI_C_BackroomsLevers_F.Value, Options.ESPI_C_BackroomsLevers_O.Value)
+                    table.insert(EspTable.Interactables.BackroomsLevers, {Highlight, TextLabel})
+
+                    v:WaitForChild("ActivateEventPrompt", 9e9)
+
+                    if v.ActivateEventPrompt:GetAttribute("Interactions") then
+                        RemoveEspSmooth(v)
+                    else
+                        v.ActivateEventPrompt.AttributeChanged:Once(function()
+                            RemoveEspSmooth(v)
+                        end)
+                    end
+                end)
+
+            elseif v.Name == "LiveHintBook" then
+
+                v:WaitForChild("Base", 9e9)
+
+                local Highlight, TextLabel = Esp(v, v, "Book", Options.ESPI_C_LibraryBooks_F.Value, Options.ESPI_C_LibraryBooks_O.Value)
+                table.insert(EspTable.Interactables.LibraryBooks, {Highlight, TextLabel})
+
+            elseif v.Name == "LiveBreakerPolePickup" then
+
+                v:WaitForChild("Base", 9e9)
+
+                local Highlight, TextLabel = Esp(v, v, "Breaker Pole", Options.ESPI_C_BreakerPoles_F.Value, Options.ESPI_C_BreakerPoles_O.Value)
+                table.insert(EspTable.Interactables.BreakerPoles, {Highlight, TextLabel})
+
+            elseif MiscPickups[v.Name] then
+				
+                repeat task.wait() until v.PrimaryPart
+
+                local Highlight, TextLabel = Esp(v, v.PrimaryPart, MiscPickups[v.Name], Options.ESPI_C_MiscPickups_F.Value, Options.ESPI_C_MiscPickups_O.Value)
+                table.insert(EspTable.Interactables.MiscPickups, {Highlight, TextLabel})
+
+            elseif v.Name == "GiggleCeiling" then
+
+                v:WaitForChild("Hitbox", 9e9)
+                v.Hitbox.CanTouch = not Toggles.ES_AntiGiggle.Value
+
+                v:WaitForChild("Root", 9e9)
+                local Highlight, TextLabel = Esp(v, v.Root, "Giggle", Color3.new(0.9, 0.9, 0.9))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+            elseif v.Name == "Snare" then
+
+                v:WaitForChild("Hitbox", 9e9)
+                v.Hitbox.CanTouch = not Toggles.ES_AntiSnare.Value
+
+            elseif v.Name == "ChandelierObstruction" then
+
+                v:WaitForChild("HurtPart", 9e9)
+
+                v.HurtPart.CanTouch = not Toggles.ES_AntiChanedlier.Value
+
+            elseif v.Name == "Seek_Arm" then
+
+                v:WaitForChild("AnimatorPart", 9e9)
+
+                v.AnimatorPart.CanTouch = not Toggles.ES_AntiSeekArms.Value
+
+            elseif v.Name == "DoorFake" then
+
+                v:WaitForChild("Hidden", 9e9)
+                v.Hidden.CanTouch = not Toggles.ES_AntiDupe.Value
+
+                v:WaitForChild("LockPart", 2):WaitForChild("UnlockPrompt")
+                if v:FindFirstChild("LockPart") then
+                    v.LockPart.UnlockPrompt.Enabled = not Toggles.ES_AntiDupe.Value
+                end
+
+            elseif v.Name == "FigureRig" then
+
+                v:WaitForChild("Torso", 9e9)
+                local Highlight, TextLabel = Esp(v, v.Torso, "Figure", Color3.new(0.75, 0, 0))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+            elseif v.Name == "_NestHandler" then
+                v:WaitForChild("Console", 9e9):WaitForChild("Button", 9e9):WaitForChild("ActivateEventPrompt", 9e9)
+                repeat task.wait() until v.Console.Button.ActivateEventPrompt:GetAttribute("Interactions")
+
+                local Anchors = {}
+
+                while not next(Anchors) and task.wait() and not Library.Unloaded do
+                    for _, Anchor in v:GetChildren() do
+                        if Anchor.Name == "MinesAnchor" and not Anchor:GetAttribute("Activated") then
+                            table.insert(Anchors, AnchorIdentify[Anchor.Sign.TextLabel.Text], Anchor)
                         end
                     end
+
+                    local AnchorsIndex = {}
+                    for Index in Anchors do
+                        table.insert(AnchorsIndex, Index)
+                    end
+
+                    local NumberIndex = math.min( unpack(AnchorsIndex) )
+                    local NextAnchor = Anchors[NumberIndex]
+
+                    if NumberIndex > 1 then
+                        local Code = LocalPlayer.PlayerGui.MainUI.MainFrame.AnchorHintFrame.Code.Text
+                        local Offset = tonumber(NextAnchor.Note.SurfaceGui.TextLabel.Text)
+
+                        local Solved = SolveAnchor(Code, Offset)
+
+                        task.spawn(function()
+                            while not Library.Unloaded and task.wait() and not NextAnchor:GetAttribute("Activated") do
+                                if Toggles.GA_AnchorAutoSolve.Value and (LocalPlayer.Character.Collision.Position - NextAnchor.AnchorBase.Position).Magnitude < 12 then
+                                    NextAnchor.AnchorRemote:InvokeServer( tostring(Code) )
+                                end
+                            end
+                        end)
+
+                        if Toggles.GN_AnchorCode.Value then
+                            Notify("Anchor code solved.", "The code for Anchor "..NextAnchor.Sign.TextLabel.Text.." is '".. Solved .."'.", 10)
+                        end
+
+                        local Highlight, TextLabel = Esp(NextAnchor, NextAnchor.AnchorBase, "( ".. Solved .." ) Anchor "..NextAnchor.Sign.TextLabel.Text, Color3.new(0.5, 0.25, 1))
+                        table.insert(EspTable.Interactables.Anchors, {Highlight, TextLabel})
+					else
+                        task.spawn(function()
+                            local Code = LocalPlayer.PlayerGui.MainUI.MainFrame:WaitForChild("AnchorHintFrame", 9e9).Code.Text
+
+                            while not Library.Unloaded and task.wait() and not NextAnchor:GetAttribute("Activated") do
+                                if Toggles.GA_AnchorAutoSolve.Value and (LocalPlayer.Character.Collision.Position - NextAnchor.AnchorBase.Position).Magnitude < 12 then
+                                    NextAnchor.AnchorRemote:InvokeServer( tostring(Code) )
+                                end
+                            end
+                        end)
+
+                        local Highlight, TextLabel = Esp(NextAnchor, NextAnchor.AnchorBase, "Anchor "..NextAnchor.Sign.TextLabel.Text, Color3.new(0.5, 0.25, 1))
+                        table.insert(EspTable.Interactables.Anchors, {Highlight, TextLabel})
+                    end
+
+                    repeat task.wait() until NextAnchor:GetAttribute("Activated")
+
+                    RemoveEspSmooth(NextAnchor)
+                    v.Console.Button.ActivateEventPrompt:GetAttributeChangedSignal("Interactions"):Wait()
+
+                    table.clear(Anchors)
+                end
+            elseif v.Name == "GrumbleRig" then
+                v:WaitForChild("Root", 9e9)
+                task.wait(1)
+
+                local Highlight, TextLabel = Esp(v, v, "Grumble", Color3.new(0.85, 0.85, 0.85))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+            elseif v.Name == "GloomEgg" then
+                v:WaitForChild("Egg", 9e9)
+
+                v.Egg.CanTouch = not Toggles.ES_AntiGloombat.Value
+
+            elseif v.Name == "TriggerEventCollision" then
+                while task.wait() and v and #v:GetChildren() > 0 do
+                    local Part = v:FindFirstChildWhichIsA("BasePart")
+
+                    if Part and Toggles.ER_RemoveSeek.Value then
+                        firetouchinterest(LocalPlayer.Character.Collision, Part, true and false)
+                    end
+                end
+            end
+
+        elseif v.Parent and v.Parent.Name == "PathfindNodes" then
+            v.Transparency = Toggles.VW_RushNodes.Value and 0 or 1
+        end
+
+    end),
+
+    workspace.ChildAdded:Connect(function(v)
+        if v:IsA("Camera") then
+
+            CameraAdded = workspace.CurrentCamera.ChildAdded:Connect(function(v)
+
+                if v.Name == "Screech" then
+                    if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Screech"] then
+                        Notify("Entity 'Screech' has spawned!", "Look around and look at it quickly!")
+                    end
+                elseif v.Name == "LiveSanity" then
+                    task.delay(0.2, function()
+
+                        if workspace:FindFirstChild()("EntityModel") then
+                            v.Enabled = not Toggles.VR_NoHasteEffect.Value
+                        end
+
+                    end)
+                end
+
+            end)
+
+        elseif v:IsA("Model") then
+            if v.Name == "GloombatSwarm" then
+                v:WaitForChild("BatsHolder", 9e9)
+
+                v.BatsHolder.ChildAdded:Connect(function(Bat)
+                    Bat:WaitForChild("LiveClientBat", 9e9):WaitForChild("Main", 9e9)
+
+                    for _, Sound in Bat.LiveClientBat.Main:GetChildren() do
+                        if Sound:IsA("Sound") then
+                            Sound:SetAttribute("_Original", Sound.Volume)
+
+                            if Toggles.MA_SilentGloombat.Value then
+                                Sound.Volume = 0
+                            end
+                        end
+
+                    end
+                end)
+
+                if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Gloombat Swarm"] then
+                    Notify(v:GetAttribute("WaitForOpen") and "A gloombat swarm will occur in the next few rooms." or "A gloombat swarm has spawned!", "Keep off all light sources and keep going!")
+                end
+
+            elseif v.Name == "Dread" then
+
+                v:WaitForChild("Main", 9e9)
+
+                Instance.new("Humanoid", v)
+                v.Main.Transparency = 0.999
+
+                local Highlight, TextLabel = Esp(v, v.Main, "Dread", Color3.new(0.4, 0.4, 0.4))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+                if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Dread"] then
+                    Notify("Entity 'Dread' has spawned!", "Open the next door quickly!")
+                end
+
+            elseif v.Name == "RushMoving" then
+
+                v:WaitForChild("RushNew", 9e9)
+
+                Instance.new("Humanoid", v)
+                v.RushNew.Transparency = 0.999
+
+                local Highlight, TextLabel = Esp(v, v, "Rush", Color3.new(0.35, 0.4, 0.45))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+                if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Rush"] then
+                    print("sdfsdfsdfsdf")
+                    Notify("Entity 'Rush' has spawned!", "Find a hiding spot quickly!")
+                end
+
+            elseif v.Name == "AmbushMoving" then
+
+                v:WaitForChild("RushNew", 9e9)
+
+                Instance.new("Humanoid",v)
+                v.RushNew.Transparency = 0.999
+
+                local Highlight, TextLabel = Esp(v, v, "Ambush", Color3.fromRGB(80, 255, 110))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+                if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Ambush"] then
+                    Notify("Entity 'Ambush' has spawned!", "Ambush can rebound 2 - 4 times, find a hiding spot quickly!")
+                end
+
+            elseif v.Name == "A60" then
+
+                v:WaitForChild("Main", 9e9)
+
+                Instance.new("Humanoid", v)
+                v.Main.Transparency = 0.999
+
+                local Highlight, TextLabel = Esp(v, v.Main, "A-60", Color3.fromRGB(200, 50, 50))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+                if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["A-60"] then
+                    Notify("Entity 'A-60' has spawned!", "Find a hiding spot quickly!")
+                end
+
+            elseif v.Name == "A120" then
+
+                v:WaitForChild("Main", 9e9)
+
+                Instance.new("Humanoid", v)
+                v.Main.Transparency = 0.999
+
+                local Highlight, TextLabel = Esp(v, v.Main, "A-120", Color3.fromRGB(55, 55, 55))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+                if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["A-120"] then
+                    Notify("Entity 'A-120' has spawned!", "Find a hiding spot quickly!")
+                end
+
+            elseif v.Name == "BackdoorRush" then
+
+                v:WaitForChild("Main", 9e9):WaitForChild("AttachmentSwitch", 9e9):WaitForChild("ParticleEmitter", 9e9)
+
+                Instance.new("Humanoid", v)
+                v.Main.Transparency = 0.999
+
+                local Highlight, TextLabel = Esp(v, v.Main, "Blitz", Color3.fromRGB(0, 175, 80))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+                if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Blitz"] then
+                    Notify("Entity 'Blitz' has spawned!", "Blitz can rebound and pause in place at random, Find a hiding spot quickly!", 5)
+                end
+
+                local EnableChanged = v.Main.AttachmentSwitch.ParticleEmitter:GetPropertyChangedSignal("Enabled"):Connect(function()
+                    local Color = v.Main.AttachmentSwitch.ParticleEmitter.Enabled and Color3.fromRGB(235, 80, 80) or Color3.fromRGB(0, 175, 80)
+
+                    game:GetService("TweenService"):Create( v._LOLHAXHL, TweenInfo.new(2 / 3), { FillColor = Color } ):Play()
+                    game:GetService("TweenService"):Create( v._LOLHAXHL, TweenInfo.new(2 / 3), { OutlineColor = Color } ):Play()
+                    game:GetService("TweenService"):Create( v._LOLHAXBG.TextLabel, TweenInfo.new(2 / 3), { TextColor3 = Color } ):Play()
+                end)
+
+                v.Destroying:Once(function()
+                    EnableChanged:Disconnect()
+                end)
+
+            elseif v.Name == "Eyes" then
+
+                v:WaitForChild("Core", 9e9):WaitForChild("Ambience", 9e9)
+
+                Instance.new("Humanoid", v)
+                v.Core.Transparency = 0.999
+
+                local Highlight, TextLabel = Esp(v, v.Core, "Eyes", Color3.fromRGB(127, 30, 220))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+                if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Eyes"] then
+                    Notify("Entity 'Eyes' has spawned!", "Avoid looking at it!")
+                end
+
+            elseif v.Name == "BackdoorLookman" then
+
+                v:WaitForChild("Core", 9e9):WaitForChild("Ambience", 9e9)
+
+                Instance.new("Humanoid", v)
+                v.Core.Transparency = 0.999
+
+                local Highlight, TextLabel = Esp(v, v.Core, "Lookman", Color3.fromRGB(110, 15, 15))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+                if Toggles.GN_Entities.Value and Options.GN_Entities_Options.Value["Lookman"] then
+                    Notify("Entity 'Lookman' has spawned!", "Avoid looking at it!")
+                end
+
+            end
+
+            if EntityDistances[v.Name] then
+                task.wait(1)
+
+                local Part = v.PrimaryPart
+                v:SetAttribute("_Prediction", Part.Position)
+
+                if Toggles.DS_Debug.Value then
+                    local Folder = Instance.new("Folder", workspace)
+                    Folder.Name = "LXDebug"
+
+                    for i = 1, 5 do
+                        local DebugPart = Instance.new("Part", Folder)
+                        DebugPart.CanCollide = false
+                        DebugPart.CanQuery = false
+                        DebugPart.Anchored = true
+                        DebugPart.Name = i
+                        DebugPart.Shape = "Ball"
+                        DebugPart.Size = Vector3.new(3, 3, 3)
+
+                        Instance.new("Highlight", DebugPart)
+                    end
+                end
+
+                while task.wait() and v.Parent do
+                    task.spawn(function()
+                        local LastPosition = Part.Position
+
+                        task.wait(1 / 3)
+
+                        v:SetAttribute("_Prediction", Part.Position - LastPosition)
+                    end)
+    
+                    if Toggles.GA_AutoHide.Value then
+                        local IncludeList = {}
+
+                        for _, Room in Rooms:GetChildren() do
+                            if Room:FindFirstChild("Assets") then
+                                table.insert(IncludeList, Room.Assets)
+                            end
+                            if Room:FindFirstChild("Parts") then
+                                table.insert(IncludeList, Room.Parts)
+                            end
+                        end
+
+                        local RaycastParams = RaycastParams.new()
+                        RaycastParams.FilterDescendantsInstances = IncludeList
+                        RaycastParams.FilterType = Enum.RaycastFilterType.Include
+
+                        local Count = {0.2, 0.4, 0.6, 0.8, 1}
+
+                        for i = 1, #Count do -- Raycast before the set time for safety reasons, for example if they have it set very high..
+                            local Number = Options.GA_AutoHide_PredictionTime.Value * Count[i]
+                            local Prediction = (v:GetAttribute("_Prediction") * 3) * Number
+
+                            if workspace:FindFirstChild("LXDebug") then
+                                workspace.LXDebug[i].Position = Part.Position + Prediction
+                            end
+
+                            if not LocalPlayer.Character:GetAttribute("Hiding") and Vector3.new(Prediction.X, 0, Prediction.Z).Magnitude > 1 then
+                                local PredictionPosition = Part.Position + Prediction
+
+                                local Raycast
+
+                                if Toggles.GA_AutoHide_VisCheck.Value then
+                                    Raycast = workspace:Raycast(LocalPlayer.Character.Collision.Position, PredictionPosition - LocalPlayer.Character.Collision.Position, RaycastParams)
+                                end
+
+                                if not Raycast and (PredictionPosition - LocalPlayer.Character.Collision.Position).Magnitude <= EntityDistances[v.Name] * Options.GA_AutoHide_PredictionDistanceMultiplier.Value then
+                                    local Prompt = GetHiding()
+
+                                    if Prompt then
+                                        fireproximityprompt(Prompt)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if workspace:FindFirstChild("LXDebug") then
+                    workspace.LXDebug:Destroy()
+                end
+            end
+        end
+    end),
+}
+table.insert(Connections, CameraAdded)
+
+if game.ReplicatedStorage.FloorReplicated.ClientRemote:FindFirstChild("Haste") then
+    local HasteChanged = game.ReplicatedStorage.FloorReplicated.ClientRemote.Haste.Ambience:GetPropertyChangedSignal("Playing"):Connect(function()
+        if Toggles.MA_NoHasteSound.Value then
+            game.ReplicatedStorage.FloorReplicated.ClientRemote.Haste.Ambience.Playing = false
+        end
+    end)
+
+    table.insert(Connections, HasteChanged)
+end
+
+local namecall
+namecall = hookmetamethod(game, "__namecall", newcclosure(function(v, ...)
+    local Method = getnamecallmethod()
+    local Arguments = {...}
+
+    if not Library.Unloaded then
+        if Method == "FireServer" then
+
+            if v.Name == "Crouch" and Toggles.EB_CrouchSpoof.Value then
+
+                Arguments[1] = true
+
+            elseif v.Name == "Underwater" then
+
+                Arguments[1] = false
+
+            elseif v.Name == "Screech" and Toggles.ER_NoScreechDamage.Value then
+
+                local Tool = LocalPlayer.Character:FindFirstChildWhichIsA("Tool")
+
+                Arguments[1] = not (Tool and Tool.Name == "Crucifix") ~= nil
+
+            elseif v.Name == "A90" and Toggles.ER_NoA90Damage.Value then
+
+                Arguments[1] = "didnt"
+
+            elseif v.Name == "ShadeResult" and Toggles.ER_NoShadeDamage.Value then
+
+                return
+
+            end
+
+            return namecall(v, unpack(Arguments))
+
+        elseif Method == "Destroy" then
+   
+            if v.Name == "PathfindNodes" then
+                return
+            end
+
+        end
+    end
+
+    return namecall(v, ...)
+end))
+
+A90Hook = hookfunction(require(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game.RemoteListener.Modules.A90), function(...)
+    if Toggles.ER_NoA90.Value then
+        game.ReplicatedStorage.RemotesFolder.A90:FireServer("didnt")
+        return
+    end
+
+    return A90Hook(...)
+end)
+ScreechHook = hookfunction(require(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game.RemoteListener.Modules.Screech), function(...)
+    if Toggles.ER_NoScreech.Value then
+        game.ReplicatedStorage.RemotesFolder.Screech:FireServer(true)
+        return
+    end
+ 
+    return ScreechHook(...)
+end)
+TimothyHook = hookfunction(require(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game.RemoteListener.Modules.SpiderJumpscare), function(...)
+    if Toggles.VR_TimothyJumpscare.Value then
+        return
+    end
+
+    return TimothyHook(...)
+end)
+
+local ReviveHook; ReviveHook = hookfunction(require(game.ReplicatedStorage.ModulesClient.ReviveCutscene), function(...)
+    if Toggles.VR_NoReviveCutscene.Value then
+        return
+    end
+
+    return ReviveHook(...)
+end)
+
+for _, v in Rooms:GetDescendants() do
+    task.spawn(function()
+
+        if v:IsA("Model") then
+            if v.Name == "Door" and not v:GetAttribute("Opened") then
+         
+                local RoomID = v:GetAttribute("RoomID")
+
+                if RoomID then
+                    local Adornee = v.Door
+
+                    if game.ReplicatedStorage.GameData.Floor.Value == "Hotel" then
+                        if RoomID >= 50 and RoomID <= 51 then
+                        	Adornee = v
+                        end
+                    end
+
+                    local Highlight, TextLabel = Esp(Adornee, Adornee, "Door", Options.ESPI_C_Doors_F.Value, Options.ESPI_C_Doors_O.Value)
+                    table.insert(EspTable.Interactables.Doors, {Highlight, TextLabel})
+
+                    v.AttributeChanged:Once(function()
+                        RemoveEspSmooth(Adornee)
+                    end)
+                end
+
+            elseif v.Name == "FuseObtain" then
+
+                local Highlight, TextLabel = Esp(v, v, "Generator Fuse", Options.ESPI_C_GeneratorFuses_F.Value, Options.ESPI_C_GeneratorFuses_O.Value)
+                table.insert(EspTable.Interactables.GeneratorFuses, {Highlight, TextLabel})
+
+                v.Hitbox.FuseModel.Changed:Once(function()
+                    RemoveEspSmooth(v)
+                end)
+
+            elseif v.Name == "MinesGenerator" then
+
+                local Highlight, TextLabel = Esp(v, v, "Generator", Options.ESPI_C_Generators_F.Value, Options.ESPI_C_Generators_O.Value)
+                table.insert(EspTable.Interactables.Generators, {Highlight, TextLabel})
+
+                v.Lever.Sound.Played:Once(function()
+                    RemoveEspSmooth(v)
+                end)
+            elseif v.Name == "KeyObtain" then
+
+                local Highlight, TextLabel = Esp(v, v, "Door Key", Options.ESPI_C_DoorKeys_F.Value, Options.ESPI_C_DoorKeys_O.Value)
+                table.insert(EspTable.Interactables.DoorKeys, {Highlight, TextLabel})
+
+            elseif v.Name == "GoldPile" then
+                
+                local Highlight, TextLabel = Esp(v, v, "Gold Pile [ "..v:GetAttribute("GoldValue").." ]", Options.ESPI_C_GoldPiles_F.Value, Options.ESPI_C_GoldPiles_O.Value)
+                table.insert(EspTable.Interactables.GoldPiles, {Highlight, TextLabel})
+
+            elseif v.Name == "LeverForGate" and not v.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                local Highlight, TextLabel = Esp(v, v.Main, "Gate Lever", Options.ESPI_C_GateLevers_F.Value, Options.ESPI_C_GateLevers_O.Value)
+                table.insert(EspTable.Interactables.GateLevers, {Highlight, TextLabel})
+
+                v.ActivateEventPrompt.AttributeChanged:Once(function()
+                    RemoveEspSmooth(v)
+                    RemoveEspSmooth(v.Main)
+                end)
+
+            elseif v.Name == "TimerLever" and not v.ActivateEventPrompt:GetAttribute("Interactions") then
+
+                local Highlight, TextLabel = Esp(v, v.Hitbox, "Timer Lever", Options.ESPI_C_BackroomsLevers_F.Value, Options.ESPI_C_BackroomsLevers_O.Value)
+                table.insert(EspTable.Interactables.BackroomsLevers, {Highlight, TextLabel})
+
+                v.ActivateEventPrompt.AttributeChanged:Once(function()
+                    RemoveEspSmooth(v)
+                end)
+
+            elseif v.Name == "LiveHintBook" then
+
+                local Highlight, TextLabel = Esp(v, v, "Book", Options.ESPI_C_LibraryBooks_F.Value, Options.ESPI_C_LibraryBooks_O.Value)
+                table.insert(EspTable.Interactables.LibraryBooks, {Highlight, TextLabel})
+
+            elseif v.Name == "LiveBreakerPolePickup" then
+
+                local Highlight, TextLabel = Esp(v, v, "Breaker Pole", Options.ESPI_C_BreakerPoles_F.Value, Options.ESPI_C_BreakerPoles_O.Value)
+                table.insert(EspTable.Interactables.BreakerPoles, {Highlight, TextLabel})
+
+            elseif MiscPickups[v.Name] then
+				
+                local Highlight, TextLabel = Esp(v, v.PrimaryPart, MiscPickups[v.Name], Options.ESPI_C_MiscPickups_F.Value, Options.ESPI_C_MiscPickups_O.Value)
+                table.insert(EspTable.Interactables.MiscPickups, {Highlight, TextLabel})
+
+            elseif v.Name == "GiggleCeiling" then
+
+                local Highlight, TextLabel = Esp(v, v.Root, "Giggle", Color3.new(0.9, 0.9, 0.9))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+            elseif v.Name == "FigureRig" then
+
+                local Highlight, TextLabel = Esp(v, v.Torso, "Figure", Color3.new(0.75, 0, 0))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+            elseif v.Name == "_NestHandler" then
+                v:WaitForChild("Console", 9e9):WaitForChild("Button", 9e9):WaitForChild("ActivateEventPrompt", 9e9)
+                repeat task.wait() until v.Console.Button.ActivateEventPrompt:GetAttribute("Interactions")
+
+                local Anchors = {}
+
+                while not next(Anchors) and task.wait() and not Library.Unloaded do
+                    for _, Anchor in v:GetChildren() do
+                        if Anchor.Name == "MinesAnchor" and not Anchor:GetAttribute("Activated") then
+                            table.insert(Anchors, AnchorIdentify[Anchor.Sign.TextLabel.Text], Anchor)
+                        end
+                    end
+
+                    local AnchorsIndex = {}
+                    for Index in Anchors do
+                        table.insert(AnchorsIndex, Index)
+                    end
+
+                    local NumberIndex = math.min( unpack(AnchorsIndex) )
+                    local NextAnchor = Anchors[NumberIndex]
+
+                    if NumberIndex > 1 then
+                        local Code = LocalPlayer.PlayerGui.MainUI.MainFrame.AnchorHintFrame.Code.Text
+                        local Offset = tonumber(NextAnchor.Note.SurfaceGui.TextLabel.Text)
+
+                        local Solved = SolveAnchor(Code, Offset)
+
+                        task.spawn(function()
+                            while not Library.Unloaded and task.wait() and not NextAnchor:GetAttribute("Activated") do
+                                if Toggles.GA_AnchorAutoSolve.Value and (LocalPlayer.Character.Collision.Position - NextAnchor.AnchorBase.Position).Magnitude < 12 then
+                                    NextAnchor.AnchorRemote:InvokeServer( tostring(Code) )
+                                end
+                            end
+                        end)
+
+                        if Toggles.GN_AnchorCode.Value then
+                            Notify("Anchor code solved.", "The code for Anchor "..NextAnchor.Sign.TextLabel.Text.." is '".. Solved .."'.", 10)
+                        end
+
+                        local Highlight, TextLabel = Esp(NextAnchor, NextAnchor.AnchorBase, "( ".. Solved .." ) Anchor "..NextAnchor.Sign.TextLabel.Text, Color3.new(0.5, 0.25, 1))
+                        table.insert(EspTable.Interactables.Anchors, {Highlight, TextLabel})
+					else
+                        task.spawn(function()
+                            local Code = LocalPlayer.PlayerGui.MainUI.MainFrame:WaitForChild("AnchorHintFrame", 9e9).Code.Text
+
+                            while not Library.Unloaded and task.wait() and not NextAnchor:GetAttribute("Activated") do
+                                if Toggles.GA_AnchorAutoSolve.Value and (LocalPlayer.Character.Collision.Position - NextAnchor.AnchorBase.Position).Magnitude < 12 then
+                                    NextAnchor.AnchorRemote:InvokeServer( tostring(Code) )
+                                end
+                            end
+                        end)
+
+                        local Highlight, TextLabel = Esp(NextAnchor, NextAnchor.AnchorBase, "Anchor "..NextAnchor.Sign.TextLabel.Text, Color3.new(0.5, 0.25, 1))
+                        table.insert(EspTable.Interactables.Anchors, {Highlight, TextLabel})
+                    end
+
+                    NextAnchor.AttributeChanged:Wait()
+                    RemoveEspSmooth(NextAnchor)
+                    v.Console.Button.ActivateEventPrompt.AttributeChanged:Wait()
+
+                    table.clear(Anchors)
+                end
+
+            elseif v.Name == "GrumbleRig" then
+     
+                local Highlight, TextLabel = Esp(v, v, "Grumble", Color3.new(0.85, 0.85, 0.85))
+                table.insert(EspTable.Entities, {Highlight, TextLabel})
+
+            end
+        end
+
+    end)
+end
+
+Options.GN_NotificationAlignment:OnChanged(function()
+    for _,v in NotificationHolder:GetChildren() do
+        local Alignment = 0.5
+        if Options.GN_NotificationAlignment.Value == "Left" then
+            Alignment = 1
+        elseif Options.GN_NotificationAlignment.Value == "Right" then
+            Alignment = 0
+        end
+
+        v.AnchorPoint = Vector2.new(Alignment, 0.5)
+    end
+end)
+Options.GN_NotificationOffset_X:OnChanged(function()
+    NotificationHolder.Position = UDim2.fromScale(Options.GN_NotificationOffset_X.Value, Options.GN_NotificationOffset_Y.Value)
+end)
+Options.GN_NotificationOffset_Y:OnChanged(function()
+    NotificationHolder.Position = UDim2.fromScale(Options.GN_NotificationOffset_X.Value, Options.GN_NotificationOffset_Y.Value)
+end)
+
+Toggles.ES_AlwaysJump:OnChanged(function()
+    LocalPlayer.Character:SetAttribute("CanJump", Toggles.ES_AlwaysJump.Value or CanJump)     
+
+    if not Toggles.ES_AlwaysJump.Value then
+        CanJump = LocalPlayer.Character:GetAttribute("CanJump")
+    end
+end)
+
+Toggles.EB_CrouchSpoof:OnChanged(function()
+    game.ReplicatedStorage.RemotesFolder.Crouch:FireServer(Toggles.EB_CrouchSpoof.Value)
+end)
+
+Toggles.MA_SilentJammin:OnChanged(function()
+    -- shit code..
+
+    local Jammin = not game.ReplicatedStorage.LiveModifiers:FindFirstChild("Jammin")
+
+    LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game.Health.Jam.Playing = not (Toggles.MA_SilentJammin.Value or Jammin)
+    game.SoundService.Main.Jamming.Enabled = not (Toggles.MA_SilentJammin.Value or Jammin)
+end)
+
+Toggles.VR_NoHidingVignette:OnChanged(function()
+    LocalPlayer.PlayerGui.MainUI.MainFrame.HideVignette.Image = (Toggles.VR_NoHidingVignette.Value and "rbxassetid://0" or "rbxassetid://6100076320")
+end)
+
+Toggles.MA_SilentInteracting:OnChanged(function()
+    LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game.PromptService.Triggered.Volume = (Toggles.MA_SilentInteracting.Value and 0 or 0.04)
+end)
+
+Options.VV_FieldOfView:OnChanged(function()
+    if Options.VV_FieldOfView.Value <= 0 and Main_Game then
+        task.wait()
+
+        Main_Game.fovtarget = 70
+    end
+end)
+
+Toggles.MM_Walkspeed:OnChanged(function()
+    task.wait()
+
+    getsenv(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game.Movement).updatespeed()
+end)
+Options.MM_Walkspeed_S:OnChanged(function()
+    task.wait()
+
+    getsenv(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game.Movement).updatespeed()
+end)
+
+Toggles.ES_AntiGiggle:OnChanged(function()
+    for _, Room in Rooms:GetChildren() do
+
+        for _, Giggle in Room:GetChildren() do
+            if Giggle:IsA("Model") and Giggle.Name == "GiggleCeiling" then
+                Giggle:WaitForChild("Hitbox", 9e9)
+                Giggle.Hitbox.CanTouch = not Toggles.ES_AntiGiggle.Value
+            end
+        end
+
+    end
+end)
+Toggles.ES_AntiDupe:OnChanged(function()
+    for _, v in Rooms:GetDescendants() do
+
+        if v.Name == "DoorFake" and v:IsA("Model") then
+            v.Hidden.CanTouch = not Toggles.ES_AntiDupe.Value
+
+            if v:FindFirstChild("LockPart") and v.LockPart:FindFirstChild("UnlockPrompt") then
+                v.LockPart.UnlockPrompt.Enabled = not Toggles.ES_AntiDupe.Value
+            end
+        end
+
+    end
+end)
+Toggles.ES_AntiSnare:OnChanged(function()
+    for _, v in Rooms:GetDescendants() do
+
+        if v.Name == "Snare" and v:FindFirstChild("Hitbox") then
+            v.Hitbox.CanTouch = not Toggles.ES_AntiSnare.Value
+        end
+
+    end
+end)
+Toggles.ES_AntiSeekArms:OnChanged(function()
+    for _, v in Rooms:GetDescendants() do
+
+        if v.Name == "AnimatorPart" and v:IsA("Part") and v.Parent.Name == "Seek_Arm" then
+            v.CanTouch = not Toggles.ES_AntiSeekArms.Value
+        end
+
+    end
+end)
+Toggles.ES_AntiChanedlier:OnChanged(function()
+    for _, v in Rooms:GetDescendants() do
+
+        if v.Name == "HurtPart" and v:IsA("Part") and v.Parent.Name == "ChandelierObstruction" then
+            v.CanTouch = not Toggles.ES_AntiChanedlier.Value
+        end
+
+    end
+end)
+Toggles.ES_AntiGloombat:OnChanged(function()
+    for _, v in Rooms:GetDescendants() do
+
+        if v.Name == "GloomEgg" and v:IsA("Model") then
+            v.Egg.CanTouch = not Toggles.ES_AntiGloombat.Value
+        end
+
+    end
+end)
+
+Toggles.ER_NoShade:OnChanged(function()
+    ShadeModule.stuff = (Toggles.ER_NoShade.Value and (function() end) or ShadeFunction)
+end)
+
+Toggles.VV_NoLookBob:OnChanged(function()
+    if Main_Game then
+        Main_Game.spring.Speed = (Toggles.VV_NoLookBob.Value and 9e9 or 8)
+    end
+end)
+
+Toggles.VW_Ambience:OnChanged(function()
+    game.Lighting.GlobalShadows = not Toggles.VW_Ambience.Value
+    game.Lighting.OutdoorAmbient = (Toggles.VW_Ambience.Value and Options.VW_Ambience_C.Value or Color3.new(0, 0, 0))
+end)
+Options.VW_Ambience_C:OnChanged(function()
+    game.Lighting.GlobalShadows = not Toggles.VW_Ambience.Value
+    game.Lighting.OutdoorAmbient = (Toggles.VW_Ambience.Value and Options.VW_Ambience_C.Value or Color3.new(0, 0, 0))
+end)
+
+Toggles.VW_NoFog:OnChanged(function()
+    if Atmosphere then
+        Atmosphere.Density = (Toggles.VW_NoFog.Value and 0 or OldFog)
+    end
+
+    if Toggles.VW_NoFog.Value then
+        OldFogEnd = game.Lighting.FogEnd
+
+        game.Lighting.FogEnd = 9999
+    else
+        game.Lighting.FogEnd = OldFogEnd
+    end
+end)
+
+Toggles.VW_RushNodes:OnChanged(function()
+    for _, Room in Rooms:GetChildren() do
+        if Room:FindFirstChild("PathfindNodes") then
+            for _, Node in Room.PathfindNodes:GetChildren() do
+                Node.Transparency = Toggles.VW_RushNodes.Value and 0 or 1
+            end
+        end
+    end
+end)
+
+Toggles.VR_NoHasteEffect:OnChanged(function()
+    for _,v in workspace.CurrentCamera:GetChildren() do
+        if v.Name == "LiveSanity" and workspace:FindFirstChild("EntityModel") then
+            v.Enabled = not Toggles.VR_NoHasteEffect.Value
+        end
+    end
+end)
+
+Toggles.VR_NoGlitchJumpscare:OnChanged(function()
+    GlitchModule.stuff = (Toggles.VR_NoGlitchJumpscare.Value and (function() end) or GlitchFunction)
+end)
+
+Toggles.VR_NoVoidEffect:OnChanged(function()
+    VoidModule.stuff = (Toggles.VR_NoVoidEffect.Value and (function() end) or VoidFunction)
+end)
+
+Toggles.VR_NoSeekEffects:OnChanged(function()
+    SeekModule.tease = (Toggles.VR_NoSeekEffects.Value and (function() end) or SeekFunction)
+end)
+
+Toggles.MA_SilentGloombat:OnChanged(function()
+    local GloombatSwarm = workspace:FindFirstChild("GloombatSwarm")
+
+    if GloombatSwarm then
+        for _, Bat in GloombatSwarm.BatsHolder:GetChildren() do
+
+            for _, Sound in Bat.LiveClientBat.Main:GetChildren() do
+                if Sound:IsA("Sound") then
+                    if not Sound:GetAttribute("_Original") and Sound.Volume >= 0 then
+                        Sound:SetAttribute("_Original", Sound.Volume)
+                    end
+
+                    Sound.Volume = (Toggles.MA_SilentGloombat.Value and 0 or Sound:GetAttribute("_Original"))
+                end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(0.23) and not Library.Unloaded do
+        if Toggles.EB_SpeedBypass.Value then
+            if ClonedCollision then
+                ClonedCollision.Massless = false
+                task.wait(0.23)
+
+                if LocalPlayer.Character.HumanoidRootPart.Anchored then
+                    ClonedCollision.Massless = true
+                    task.wait(1)
+                end
+
+                ClonedCollision.Massless = true
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait() and not Library.Unloaded do
+        if LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and Toggles.VV_Thirdperson.Value and Options.VV_Thirdperson_K:GetState() then
+            for _, v in LocalPlayer.Character:GetChildren() do
+                if v:IsA("Accessory") then
+                    local Clone = v:FindFirstChildWhichIsA("MeshPart"):Clone()
+                    Clone.Parent = ThirdpersonParts
+                end
+            end
+
+            local Clone = LocalPlayer.Character.Head:Clone()
+            Clone.Parent = ThirdpersonParts
+            Clone.Material = "SmoothPlastic"
+
+            local ThirdpersonRenderstepped = game:GetService("RunService").RenderStepped:Connect(function()
+                if Main_Game then
+                    if Toggles.VV_ThirdpersonCamCollision.Value then
+                        local RaycastParams = RaycastParams.new()
+                        RaycastParams.FilterDescendantsInstances = {LocalPlayer.Character, ThirdpersonParts}
+                        RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+                        local Direction = (Main_Game.basecamcf * CFrame.new(Options.VV_ThirdpersonOffset.Value, Options.VV_ThirdpersonOffsetUp.Value, 3.5 * (Options.VV_ThirdpersonDistance.Value / 7.5))).Position - Main_Game.basecamcf.Position
+                        local Spherecast = workspace:Spherecast(Main_Game.basecamcf.Position, 0.2, Direction, RaycastParams)
+
+                        if Spherecast and Spherecast.Instance.CanCollide and Spherecast.Instance.Transparency < 0.99 then
+                            local RayPosition = Main_Game.basecamcf.Position + Direction.Unit * Spherecast.Distance
+
+                            workspace.CurrentCamera.CFrame = CFrame.new(RayPosition, RayPosition + Main_Game.basecamcf.LookVector) * (Toggles.VV_NoCamShake.Value and CFrame.new() or Main_Game.csgo)
+                        else
+                            workspace.CurrentCamera.CFrame = Main_Game.basecamcf * CFrame.new(Options.VV_ThirdpersonOffset.Value, Options.VV_ThirdpersonOffsetUp.Value, 3.5 * (Options.VV_ThirdpersonDistance.Value / 7.5)) * (Toggles.VV_NoCamShake.Value and CFrame.new() or Main_Game.csgo)
+                        end
+                    else
+                        workspace.CurrentCamera.CFrame = Main_Game.basecamcf * CFrame.new(Options.VV_ThirdpersonOffset.Value, Options.VV_ThirdpersonOffsetUp.Value, 3.5 * (Options.VV_ThirdpersonDistance.Value / 7.5)) * (Toggles.VV_NoCamShake.Value and CFrame.new() or Main_Game.csgo)
+                    end
+                end
+            end)
+
+            repeat task.wait() until Library.Unloaded or not Options.VV_Thirdperson_K:GetState() or not Toggles.VV_Thirdperson.Value
+            ThirdpersonRenderstepped:Disconnect()
+            ThirdpersonParts:ClearAllChildren()
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait() and not Library.Unloaded and not PadlockCode_N do
+        local Paper = HasItem("LibraryHintPaper")
+
+        if not Paper then
+            for _, Player in game.Players:GetPlayers() do
+                if Player ~= LocalPlayer and (Player.Character:FindFirstChild("LibraryHintPaper") or Player.Backpack:FindFirstChild("LibraryHintPaper")) then
+                    Paper = Player.Character:FindFirstChild("LibraryHintPaper") or Player.Backpack:FindFirstChild("LibraryHintPaper")
                 end
             end
         end
 
-        scanTimer += dt
-        if (Config.Warn or Config.Counter) and scanTimer >= 0.1 then
-            scanTimer = 0
-            cachedCount, cachedAiming = scan(myCharacter, myRoot)
-        elseif not Config.Warn and not Config.Counter then
-            scanTimer = 0
-            cachedCount, cachedAiming = 0, false
-        end
+        if Paper and Paper:FindFirstChild("UI") and Rooms["50"].Door:FindFirstChild("Padlock") then
+            local Code = ""	
+            for _, x in Paper.UI:GetChildren() do
+                if tonumber(x.Name) then
+                    for _, y in LocalPlayer.PlayerGui.PermUI.Hints:GetChildren() do
+                        if y.Name == "Icon" then
+                            if y.ImageRectOffset == x.ImageRectOffset then
+                                Code = Code .. y.TextLabel.Text
+                            end
+                        end
+                    end
+                end
 
-        warning.Visible = Config.Warn and cachedAiming and myRoot ~= nil
-        if warning.Visible then
-            warning.TextColor3 = math.floor(os.clock() / Config.WarnFlip) % 2 == 0
-                and Config.WarnColorA or Config.WarnColorB
-        end
+                if #Code == 5 then
+                    if Toggles.GN_PadlockCode.Value then
 
-        countPill.Visible = Config.Counter
-        if Config.Counter then
-            countText.Text = ("Total enemy around you: %d"):format(
-                myRoot and cachedCount or 0
-            )
-        end
+                        Notify("Padlock code found!", "The code is... '".. Code .."', this is also printed in console!", 10)
+                        print("[LOLHAX] The padlock code is: ".. Code)
 
-        fpsPill.Visible = Config.Fps
-        if Config.Fps then
-            fps += ((1 / math.max(dt, 0.0001)) - fps) * 0.1
-            fpsTimer += dt
-            if fpsTimer >= 0.25 then
-                fpsTimer = 0
-                fpsText.Text = ("%d FPS"):format(math.floor(fps + 0.5))
+                        PadlockCode_N = Code
+                    end
+
+                    PadlockCode = Code
+                end
+
+                if PadlockCode then break end
             end
         end
     end
-)
-
-connect(UserInputService.InputBegan, function(input, processed)
-    if not processed and input.KeyCode == Config.ExitKey then
-        unload()
-    end
 end)
 
-notify(
-    "haxbey engine",
-    "Initialized. Enter your remote names under Character > Remote search."
-)
+-- Everything else vvv
+
+task.spawn(function()
+    function updateRPC(Bool)
+        local LargeImage =  { assetId = 0, hoverText = "" }
+        local State = ""
+
+        if game.ReplicatedStorage.GameData.Floor.Value == "Hotel" then
+            State = `[ Door {game.ReplicatedStorage.GameData.LatestRoom.Value} ] In The Hotel`
+            LargeImage = { assetId = 16875079348, hoverText = "In The Hotel" }
+        elseif game.ReplicatedStorage.GameData.Floor.Value == "Retro" then
+            State = `[ Door {game.ReplicatedStorage.GameData.LatestRoom.Value} ] In The Retro Hotel`
+            LargeImage = { assetId = 16992279648, hoverText = "In The Retro Hotel" }
+        elseif game.ReplicatedStorage.GameData.Floor.Value == "Rooms" then
+            State = `[ Room {game.ReplicatedStorage.GameData.LatestRoom.Value} ] In The Rooms`
+            LargeImage = { assetId = 16874821428, hoverText = "In The Rooms" }
+        elseif game.ReplicatedStorage.GameData.Floor.Value == "Backdoor" then
+            State = `[ Door {game.ReplicatedStorage.GameData.LatestRoom.Value - 51} ] In The Backdoor`
+            LargeImage = { assetId = 16874352892, hoverText = "In The Backdoor" }
+        elseif game.ReplicatedStorage.GameData.Floor.Value == "Mines" then
+            State = `[ Door {game.ReplicatedStorage.GameData.LatestRoom.Value + 100} ] In The Mines`
+            LargeImage = { assetId = 138779629462354, hoverText = "In The Mines" }
+        end
+
+        print("[BloxstrapRPC] {\"command\": \"SetRichPresence\", \"data\": " .. game:GetService("HttpService"):JSONEncode({
+            details = Bool and "[ Playing DOORS 👁️ ] Lolhax.xyz" or "<reset>",
+            state = Bool and State or "<reset>",
+            largeImage = Bool and LargeImage or { reset = true },
+            smallImage = Bool and { assetId = 16874068594, hoverText = "LOLHAX" } or { reset = true }
+        }) .. "}")
+    end
+
+    local MenuProperties = Tabs.Config:AddLeftGroupbox("Menu")
+    MenuProperties:AddButton("Unload", function()
+        Library:Unload()
+        Library.Unloaded = true
+
+        for _, Connection in Connections do
+            Connection:Disconnect()
+        end
+        Detection:Disconnect()
+        ThirdpersonParts:Destroy()
+        LXNotifications:Destroy()
+        ClonedCollision:Destroy()
+
+        game.Lighting.GlobalShadows = true
+        game.Lighting.OutdoorAmbient = Color3.new(0,0,0)
+
+        for _, v in workspace:GetDescendants() do
+            if v.Name:sub(1, 7) == "_LOLHAX" then
+                v:Destroy()
+            end
+        end
+
+        LocalPlayer.Character.HumanoidRootPart.CustomPhysicalProperties = OldAccel
+
+        Main_Game.spring.Speed = 8
+        Main_Game.fovtarget = 70
+        getsenv(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game.Movement).updatespeed()
+
+        ShadeModule.stuff = ShadeFunction
+        GlitchModule.stuff = GlitchFunction
+        VoidModule.stuff = VoidFunction
+        SeekModule.tease = SeekFunction
+    end)
+
+    MenuProperties:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightShift", NoUI = true, Text = "Menu keybind" })
+    MenuProperties:AddDivider()
+    MenuProperties:AddToggle("keybindmenu", { Text = "Show Keybinds", Default = false })
+
+    Toggles.keybindmenu:OnChanged(function()
+        Library.KeybindFrame.Visible = Toggles.keybindmenu.Value
+    end)
+
+    Library.ToggleKeybind = Options.MenuKeybind
+
+    ThemeManager:SetLibrary(Library)
+    ThemeManager:SetFolder("lolhax/Themes")
+    ThemeManager:ApplyToTab(Tabs.Config)
+
+    SaveManager:SetLibrary(Library)
+    SaveManager:SetFolder("lolhax/Doors3")
+    SaveManager:BuildConfigSection(Tabs.Config)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:LoadAutoloadConfig()
+
+    local DebugStuff = Tabs.Config:AddRightGroupbox("Other")
+    DebugStuff:AddToggle("DS_Debug", { Text = "Enable Debug Mode", Default = false, })
+    DebugStuff:AddToggle("DS_BSRPC", { Text = "Bloxstrap RPC", Default = true })
+
+    local RPCRoomChange = game.ReplicatedStorage.GameData.LatestRoom:GetPropertyChangedSignal("Value"):Connect(function() updateRPC(Toggles.DS_BSRPC.Value) end)
+    table.insert(Connections, RPCRoomChange)
+
+    Toggles.DS_BSRPC:OnChanged(function()
+        updateRPC(Toggles.DS_BSRPC.Value)
+    end)
+
+    ErrorMessageOut:Disconnect()
+    Notify("Load successful.", "Loading finished in ".. string.format("%.2f", tick() - Loadtime) .." seconds.", 10 / 3, true)
+end)
+do
+    local RunService = game:GetService("RunService")
+
+    local RGBConnection = nil
+    local RGBOriginals = {}
+    local RGBActive = false
+
+    local function IsRGBOption(Name)
+        if Name == "AccentColor" or Name == "MainColor" then
+            return true
+        end
+
+        if Name == "ESPPLAYERFILLCOLOR"
+        or Name == "ESPPLAYEROUTLINECOLOR"
+        or Name == "LXPLAYERFILLCOLOR"
+        or Name == "LXPPLAYEROUTLINECOLOR" then
+            return true
+        end
+
+        if string.match(Name, "^ESPI_C_.+_F$") or string.match(Name, "^ESPI_C_.+_O$") then
+            return true
+        end
+
+        return false
+    end
+
+    local function SetOptionColor(Option, Color)
+        if not Option then
+            return
+        end
+
+        if typeof(Option.Set) == "function" then
+            local Success = pcall(function()
+                Option:Set(Color)
+            end)
+
+            if Success then
+                return
+            end
+        end
+
+        pcall(function()
+            Option.Value = Color
+        end)
+    end
+
+    local function ApplyRGBToEspTable(Table)
+        if typeof(Table) ~= "table" then
+            return
+        end
+
+        for _, Value in Table do
+            if typeof(Value) == "table" then
+                local Highlight = Value[1]
+                local TextLabel = Value[2]
+
+                if typeof(Highlight) == "Instance" and Highlight:IsA("Highlight") then
+                    Highlight.FillColor = RGBColor
+                    Highlight.OutlineColor = RGBColor
+                end
+
+                if typeof(TextLabel) == "Instance" and TextLabel:IsA("TextLabel") then
+                    TextLabel.TextColor3 = RGBColor
+                end
+            elseif typeof(Value) == "Instance" and Value:IsA("Highlight") then
+                Value.FillColor = RGBColor
+                Value.OutlineColor = RGBColor
+            elseif typeof(Value) == "table" then
+                ApplyRGBToEspTable(Value)
+            end
+        end
+    end
+
+    local function DisableRGB()
+        if RGBConnection then
+            RGBConnection:Disconnect()
+            RGBConnection = nil
+        end
+
+        for Name, Color in RGBOriginals do
+            local Option = Options[Name]
+
+            if Option then
+                SetOptionColor(Option, Color)
+            end
+        end
+
+        RGBOriginals = {}
+        RGBActive = false
+    end
+
+    local function EnableRGB()
+        if RGBActive then
+            return
+        end
+
+        RGBActive = true
+
+        RGBConnection = RunService.RenderStepped:Connect(function()
+            if not Toggles.RGB_Mode.Value or Library.Unloaded then
+                DisableRGB()
+                return
+            end
+
+            RGBColor = Color3.fromHSV((os.clock() * 0.35) % 1, 1, 1)
+
+            for Name, Option in Options do
+                if IsRGBOption(Name) and Option then
+                    if RGBOriginals[Name] == nil then
+                        RGBOriginals[Name] = Option.Value
+                    end
+
+                    if Name == "MainColor" then
+                        SetOptionColor(Option, RGBColor:Lerp(Color3.new(0, 0, 0), 0.82))
+                    else
+                        SetOptionColor(Option, RGBColor)
+                    end
+                end
+            end
+
+            for _, Category in EspTable.Interactables do
+                ApplyRGBToEspTable(Category)
+            end
+
+            ApplyRGBToEspTable(EspTable.Players)
+            ApplyRGBToEspTable(EspTable.Entities)
+        end)
+    end
+
+    Toggles.RGB_Mode:OnChanged(function()
+        if Toggles.RGB_Mode.Value then
+            EnableRGB()
+        else
+            DisableRGB()
+        end
+    end)
+
+    if Toggles.RGB_Mode.Value then
+        EnableRGB()
+    end
+
+    Library:OnUnload(function()
+        DisableRGB()
+    end)
+end
