@@ -41,9 +41,209 @@ local Detection = game:GetService("TextChatService").MessageReceived:Connect(fun
 end)
 -- UI vvv
 
-local Window = Library:CreateWindow({ Title = " LOLHAX ┃ ".. LocalPlayer.Name, Center = true, AutoShow = true, TabPadding = 3, MenuFadeTime = 0.15 })
+local Window = Library:CreateWindow({ Title = " HAXBEY ENGINE ┃ ".. LocalPlayer.Name, Center = true, AutoShow = true, TabPadding = 3, MenuFadeTime = 0.15 })
 local Tabs = { General = Window:AddTab("General"), Exploit = Window:AddTab("Exploits"), ESP = Window:AddTab("ESP"), Visuals = Window:AddTab("Visuals"), Misc = Window:AddTab("Miscellaneous"), Config = Window:AddTab("Config") }
 
+do
+    local RGBUI = {
+        Enabled = false,
+        ApplyingTheme = false,
+        Speed = 0.35,
+        Saturation = 1,
+        Brightness = 1,
+        Loop = nil,
+        Cached = {},
+    }
+
+    local AccentPatterns = {
+        "accent",
+        "main",
+        "element",
+    }
+
+    local function GetScheme()
+        local Scheme = rawget(Library, "Scheme")
+        return type(Scheme) == "table" and Scheme or nil
+    end
+
+    local function IsAccentKey(Key)
+        local Lower = string.lower(Key)
+
+        for _, Pattern in ipairs(AccentPatterns) do
+            if string.find(Lower, Pattern, 1, true) then
+                return true
+            end
+        end
+
+        return false
+    end
+
+    local function CacheTheme()
+        local Scheme = GetScheme()
+        if not Scheme then return end
+
+        table.clear(RGBUI.Cached)
+
+        for Key, Value in pairs(Scheme) do
+            if typeof(Value) == "Color3" and IsAccentKey(Key) then
+                RGBUI.Cached[Key] = Value
+            end
+        end
+    end
+
+    local function RestoreTheme()
+        local Scheme = GetScheme()
+        if not Scheme then return end
+
+        for Key, Color in pairs(RGBUI.Cached) do
+            pcall(function()
+                Scheme[Key] = Color
+            end)
+        end
+    end
+
+    local function ApplyRainbow()
+        local Scheme = GetScheme()
+        if not Scheme then
+            warn("[LOLHAX RGB] Library.Scheme unavailable.")
+            return false
+        end
+
+        local Hue = (tick() % RGBUI.Speed) / RGBUI.Speed
+        local Rainbow = Color3.fromHSV(Hue, RGBUI.Saturation, RGBUI.Brightness)
+
+        for Key in pairs(RGBUI.Cached) do
+            pcall(function()
+                Scheme[Key] = Rainbow
+            end)
+        end
+
+        return true
+    end
+
+    local function StartRGB()
+        if RGBUI.Loop then return end
+
+        CacheTheme()
+
+        RGBUI.Loop = task.spawn(function()
+            while RGBUI.Enabled and not Library.Unloaded do
+                if not RGBUI.ApplyingTheme then
+                    local ok, err = pcall(ApplyRainbow)
+
+                    if not ok then
+                        warn("[LOLHAX RGB] Apply failed:", err)
+                        break
+                    end
+                end
+
+                -- Slight jitter prevents a perfectly constant update interval.
+                task.wait(0.033 + math.random() * 0.012)
+            end
+
+            RestoreTheme()
+            RGBUI.Loop = nil
+        end)
+    end
+
+    local function StopRGB()
+        RGBUI.Enabled = false
+
+        if RGBUI.Loop then
+            task.cancel(RGBUI.Loop)
+            RGBUI.Loop = nil
+        end
+
+        RestoreTheme()
+    end
+
+    -- Theme compatibility:
+    -- If ThemeManager exposes ApplyTheme, pause RGB during theme application,
+    -- then recache the newly applied theme before resuming.
+    if type(ThemeManager) == "table" and type(ThemeManager.ApplyTheme) == "function" then
+        local OriginalApplyTheme = ThemeManager.ApplyTheme
+
+        function ThemeManager:ApplyTheme(...)
+            local WasEnabled = RGBUI.Enabled
+
+            if WasEnabled then
+                StopRGB()
+            end
+
+            local Results = table.pack(OriginalApplyTheme(self, ...))
+
+            if WasEnabled then
+                CacheTheme()
+                RGBUI.Enabled = true
+                StartRGB()
+            end
+
+            return table.unpack(Results, 1, Results.n)
+        end
+    end
+
+    local VisualsUI = Tabs.Visuals:AddLeftGroupbox("UI")
+
+    VisualsUI:AddToggle("UI_RGB", {
+        Text = "RGB UI",
+        Default = false,
+        Tooltip = "Cycles menu accent colors. Does not affect ESP colors.",
+        Callback = function(Value)
+            RGBUI.Enabled = Value
+
+            if Value then
+                StartRGB()
+            else
+                StopRGB()
+            end
+        end,
+    })
+
+    VisualsUI:AddSlider("UI_RGB_Speed", {
+        Text = "RGB Speed",
+        Default = 0.35,
+        Min = 0.1,
+        Max = 3,
+        Rounding = 2,
+        Compact = true,
+        Suffix = "s",
+        Callback = function(Value)
+            RGBUI.Speed = math.max(Value, 0.1)
+        end,
+    })
+
+    VisualsUI:AddSlider("UI_RGB_Saturation", {
+        Text = "Saturation",
+        Default = 1,
+        Min = 0.1,
+        Max = 1,
+        Rounding = 2,
+        Compact = true,
+        Callback = function(Value)
+            RGBUI.Saturation = Value
+        end,
+    })
+
+    VisualsUI:AddSlider("UI_RGB_Brightness", {
+        Text = "Brightness",
+        Default = 1,
+        Min = 0.2,
+        Max = 1,
+        Rounding = 2,
+        Compact = true,
+        Callback = function(Value)
+            RGBUI.Brightness = Value
+        end,
+    })
+
+    -- Restore the user's selected theme when the script unloads.
+    local OriginalUnload = Library.Unload
+
+    function Library:Unload(...)
+        StopRGB()
+        return OriginalUnload(self, ...)
+    end
+end
 local GeneralAutomation = Tabs.General:AddLeftGroupbox("Automation")
 GeneralAutomation:AddToggle("GA_AutoInteract", { Text = "Automatic Interact", Default = false, }):AddKeyPicker("GA_AutoInteract_K", { Default = "R", SyncToggleState = false, Mode = "Hold", Text = "Auto Interact", NoUI = false, Tooltip = "Will activate any nearby interactables when key is active." })
 GeneralAutomation:AddDropdown("GA_AutoInteract_Options", { Values = { "Use Lockpick ( Doors )", "Use Lockpick ( Other )", "Ignore Light Sources", "Ignore Can-Die" }, Default = 0, Multi = true, Text = "Automatic Interact Options" })
